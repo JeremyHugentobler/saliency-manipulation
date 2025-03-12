@@ -17,8 +17,18 @@ def main(input_image):
     """
     Main function, for now it's debug
     """
+
+    # Compute the saliancy map
     saliancy_map = sm.course_saliancy(input_image)
-    utils.display_image(saliancy_map, input_image)
+
+    # Apply it to the image
+    modified_images = sm.apply_range_of_saliancy(input_image, saliancy_map, [0.1, 0.2, 0.5, 0.8, 1, 2, 4])
+    # modified_image = sm.apply_saliancy(input_image, saliancy_map, 0.5)
+    
+    # Display
+    # utils.display_images([input_image, saliancy_map, modified_image])
+    utils.display_images([input_image, saliancy_map] + modified_images)
+    # utils.display_image(input_image, saliancy_map)
 
 
 # Entry point

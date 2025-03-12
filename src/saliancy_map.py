@@ -45,7 +45,7 @@ def course_saliancy(input_image):
     return C_norm
 
 
-def custom_saliancy():
+def custom_saliancy(input_image):
     """
     Computes the saliency map for a given course.
 
@@ -56,3 +56,37 @@ def custom_saliancy():
         None
     """
     pass
+
+def apply_saliancy(input_image, saliancy_map, alpha):
+    """
+    Tweaks the input image based on the saliancy map.
+
+    Args:
+        input_image: The input image to be tweaked
+        saliancy_map: The saliancy map based on which the input image is to be tweaked
+        alpha: The constant to be multiplied with the saliancy map
+
+    Returns:
+        output_image: The tweaked image
+    """
+
+    # We want to apply the formula : I_{pixel}(x,y) = I_{pixel}(x,y) + S(x,y) * alpha
+    # where alpha is a constant
+
+    factor = saliancy_map / saliancy_map.max()
+
+    output_image = input_image * np.pow(factor, alpha)
+
+    # output_image = input_image + saliancy_map * alpha
+    output_image = np.clip(output_image, 0, 255).astype(np.uint8)
+
+    return output_image
+
+def apply_range_of_saliancy(input_image, saliancy_map, alphas):
+    output_images = []
+
+    for alpha in alphas:
+        modified_image = apply_saliancy(input_image, saliancy_map, alpha)
+        output_images.append(modified_image)
+        
+    return output_images
