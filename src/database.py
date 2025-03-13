@@ -13,4 +13,5 @@ def compute_database(tau_plus, tau_minus, J, R):
     Returns:
         The database of patches D+ or D-
     """
+    # TODO : find and implement/use the model of the paper.
     pass

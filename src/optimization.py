@@ -23,11 +23,12 @@ def minimize_J(J, I_D_plus, I_D_minus, R):
     # new_pathch_p = screed_poisson(p, q)
     # j[p_coords] = new_patch_p
 
-    
+    # TODO
     pass
 
 def screed_poisson(p, q):
     """
     Screened Poisson optimization to morph q into p
     """
+    # TODO: Do we reimplement this or we use a library ?
     pass

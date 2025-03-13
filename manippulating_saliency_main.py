@@ -59,6 +59,8 @@ def manipulate_saliency(input_image, R, delta_s):
     # Iteration of the algorithm #
     ##############################
 
+    # TODO: make the coarse-to-fine iterations
+
     while compute_criterion(S_J, R, delta_s) > EPSILON:
         # DB update
         I_D_plus, I_D_minus = db.compute_database(tau_plus, tau_minus, J[0], R)
@@ -92,6 +94,7 @@ def phi(S_J, R):
     Returns:
         The saliency contrast between R and the rest of the image
     """
+    # TODO
     pass    
 
 def compute_criterion(S_J, R, delta_s):
@@ -105,6 +108,7 @@ def compute_criterion(S_J, R, delta_s):
     Returns: 
         The value of the criterion
     """
+    # TODO
     pass
 
 def update_taus(tau_plus, tau_minus, S_J, R, delta_s):
@@ -120,6 +124,7 @@ def update_taus(tau_plus, tau_minus, S_J, R, delta_s):
     Returns:
         The updated values of tau_plus and tau_minus
     """
+    # TODO
     pass
         
 
