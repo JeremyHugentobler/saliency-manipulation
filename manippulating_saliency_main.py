@@ -41,7 +41,7 @@ def manipulate_saliency(input_image, R, delta_s):
 
     # Initialize tau +/-
     tau_plus = 0
-    tau_minus = 1
+    tau_minus = 1 #TODO is it right ?
     prev_tau_plus = tau_plus
     prev_tau_minus = tau_minus
 
@@ -49,7 +49,7 @@ def manipulate_saliency(input_image, R, delta_s):
     J = [np.arraylike(input_image) for _ in range(2)]
 
     # Initialize the saliency maps S_J
-    S_J = compute_saliency_map(J, patch_size=5)
+    S_J = np.zeros_like(input_image)
 
     # Initialize the Database I_D +/-
     I_D_plus, I_D_minus = [np.arraylike(input_image) for _ in range(2)]
@@ -62,8 +62,11 @@ def manipulate_saliency(input_image, R, delta_s):
     # TODO: make the coarse-to-fine iterations
 
     while compute_criterion(S_J, R, delta_s) > EPSILON:
+        # update the saliency map
+        S_J = compute_saliency_map(J[0], patch_size=5)
+
         # DB update
-        I_D_plus, I_D_minus = db.compute_database(tau_plus, tau_minus, J[0], R)
+        I_D_plus, I_D_minus = db.compute_database(tau_plus, tau_minus, J[0], S_J)
 
         # Update tau +/-
         tau_plus, tau_minus = update_taus(tau_plus, tau_minus, S_J, R, delta_s)
