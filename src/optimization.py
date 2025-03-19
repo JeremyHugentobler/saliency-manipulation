@@ -26,6 +26,11 @@ def minimize_J(J, I_D_plus, I_D_minus, R):
     # TODO
     pass
 
+def patchmatch(p, J, D):
+    """
+    Find the closest patch q in D to p and replace it in the image J.
+    """
+
 def screed_poisson(p, q):
     """
     Screened Poisson optimization to morph q into p

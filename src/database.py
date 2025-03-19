@@ -17,10 +17,16 @@ def compute_database(tau_plus, tau_minus, J, S_J, patch_size=5):
     D_plus = np.zeros_like(J)
     D_minus = np.zeros_like(J)
 
-    D_plus = J * (S_J > tau_plus)
-    D_minus = J * (S_J < tau_minus)
+    # Create D +/- masks based on the saliency of J
+    D_plus_mask = (S_J > tau_plus) * 1
+    D_minus_mask = (S_J < tau_minus) * 1
 
-    D_plus = cv2.dilate(D_plus, np.ones((patch_size, patch_size), np.uint8), iterations=1)
-    D_minus = cv2.dilate(D_minus, np.ones((patch_size, patch_size), np.uint8), iterations=1)
+    # Dilate the masks so that for a pixel (i,j), the whole patch centered at (i,j) is selected
+    D_plus_mask = cv2.dilate(D_plus_mask, np.ones((patch_size, patch_size), np.uint8), iterations=1)
+    D_minus_mask = cv2.dilate(D_minus_mask, np.ones((patch_size, patch_size), np.uint8), iterations=1)
+
+    # Create the database by applying the patch on the image
+    D_plus = J * D_plus_mask
+    D_minus = J * D_minus_mask
 
     return D_plus, D_minus
