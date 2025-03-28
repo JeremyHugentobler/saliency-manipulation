@@ -2,14 +2,15 @@
 import numpy as np
 import cv2
 
-def compute_database(tau_plus, tau_minus, J, S_J, patch_size=5):
+def compute_image_database(tau_plus, tau_minus, J, S_J, patch_size=7):
     """
-    Compute the database of patches D+ and D- based on the current image J.
+    Compute the database of patches D+ and D- as images based on the saliency map S_J.
 
     Args:
         tau_plus: The current value of tau_plus
         J: The current image
-        R: The region of interest
+        S_J: the saliency map of J
+        patch_size: the size of a patch p
 
     Returns:
         The database of patches D+ or D-
@@ -18,8 +19,8 @@ def compute_database(tau_plus, tau_minus, J, S_J, patch_size=5):
     D_minus = np.zeros_like(J)
 
     # Create D +/- masks based on the saliency of J
-    D_plus_mask = (S_J > tau_plus) * 1
-    D_minus_mask = (S_J < tau_minus) * 1
+    D_plus_mask = (S_J > tau_plus).astype(np.uint8)
+    D_minus_mask = (S_J < tau_minus).astype(np.uint8)
 
     # Dilate the masks so that for a pixel (i,j), the whole patch centered at (i,j) is selected
     D_plus_mask = cv2.dilate(D_plus_mask, np.ones((patch_size, patch_size), np.uint8), iterations=1)
@@ -30,3 +31,28 @@ def compute_database(tau_plus, tau_minus, J, S_J, patch_size=5):
     D_minus = J * D_minus_mask
 
     return D_plus, D_minus
+
+    
+def compute_database(tau_plus, tau_minus, S_J):
+    """
+    Compute the database of patches D+ and D- as list of coordinates 
+    based on the saliency map S_J.
+
+    Args:
+        tau_plus: The current value of tau_plus
+        J: The current image
+        R: The region of interest
+
+    Returns:
+        The database of patches D+ or D-
+    """
+    # Positive DB
+    x,y = np.where(S_J > tau_plus)
+    D_plus = np.hstack([x[:, None], y[:, None]])
+
+    # Positive DB
+    x,y = np.where(S_J < tau_minus)
+    D_minus = np.hstack([x[:, None], y[:, None]])
+
+    return D_plus, D_minus
+
