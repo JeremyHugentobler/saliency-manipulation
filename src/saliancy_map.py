@@ -2,8 +2,16 @@
 
 import cv2, skimage
 import numpy as np
+from pathlib import Path
+import sys
+import torch
+from src.tempsal_wrapper import compute_saliency_map
 
+def tempsal_saliency(image):
+    saliency = compute_saliency_map(image)
 
+    # Scale the map so that max value = 1
+    return saliency[:,:,0] / saliency.max()
 
 def paper_saliancy():
     """

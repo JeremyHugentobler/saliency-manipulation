@@ -2,38 +2,31 @@
 import numpy as np
 import cv2
 
-def compute_image_database(tau_plus, tau_minus, J, S_J, patch_size=7):
+def compute_image_database(J, D_positve, D_negative, patch_size=7):
     """
-    Compute the database of patches D+ and D- as images based on the saliency map S_J.
-
-    Args:
-        tau_plus: The current value of tau_plus
-        J: The current image
-        S_J: the saliency map of J
-        patch_size: the size of a patch p
-
-    Returns:
-        The database of patches D+ or D-
+    Construct the image representation of the databases.
     """
-    D_plus = np.zeros_like(J)
-    D_minus = np.zeros_like(J)
-
     # Create D +/- masks based on the saliency of J
-    D_plus_mask = (S_J > tau_plus).astype(np.uint8)
-    D_minus_mask = (S_J < tau_minus).astype(np.uint8)
+    D_positive_mask = np.zeros_like(J)
+    D_negative_mask = np.zeros_like(J)
+
+    x,y = D_positve.T
+    D_positive_mask[x,y] = 1
+    x,y = D_negative.T
+    D_negative_mask[x,y] = 1
 
     # Dilate the masks so that for a pixel (i,j), the whole patch centered at (i,j) is selected
-    D_plus_mask = cv2.dilate(D_plus_mask, np.ones((patch_size, patch_size), np.uint8), iterations=1)
-    D_minus_mask = cv2.dilate(D_minus_mask, np.ones((patch_size, patch_size), np.uint8), iterations=1)
+    # D_positive_mask = cv2.dilate(D_positive_mask, np.ones((patch_size, patch_size), np.uint8), iterations=1)
+    # D_negative_mask = cv2.dilate(D_negative_mask, np.ones((patch_size, patch_size), np.uint8), iterations=1)
 
     # Create the database by applying the patch on the image
-    D_plus = J * D_plus_mask
-    D_minus = J * D_minus_mask
+    D_plus = J * D_positive_mask
+    D_minus = J * D_negative_mask
 
     return D_plus, D_minus
 
     
-def compute_database(tau_plus, tau_minus, S_J):
+def compute_location_database(tau_plus, tau_minus, J, S_J):
     """
     Compute the database of patches D+ and D- as list of coordinates 
     based on the saliency map S_J.
@@ -55,4 +48,3 @@ def compute_database(tau_plus, tau_minus, S_J):
     D_minus = np.hstack([x[:, None], y[:, None]])
 
     return D_plus, D_minus
-

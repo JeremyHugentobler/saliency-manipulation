@@ -1,3 +1,5 @@
+# USAGE EXEMPLE: python .\manippulating_saliency_main.py .\data\debug\easy_apple_small.jpg .\data\debug\easy_apple_mask_small.jpg 0.1
+
 # Libraries imports
 import numpy as np
 import matplotlib.pyplot as plt
@@ -16,11 +18,19 @@ from src import database as db
 # DEFAULT_IMAGE = DEBUG_IMAGES_PATH + "easy_apple.jpg"
 
 EPSILON = 1e-3
-compute_saliency_map = sm.paper_saliancy
+
+
+############################
+#    Modular Definitions   # 
+############################
+compute_saliency_map = sm.tempsal_saliency
+minimize_J = opt.minimize_J_global_poisson
+compute_database = db.compute_location_database
+
 
 
 # Main function
-def manipulate_saliency(input_image, R, delta_s):
+def manipulate_saliency(input_image, R, delta_s, nb_iterations=10):
     """
     This is the main function that will implement the saliency manipulation algorithm
     as described in the paper. The input image will see its region of interest R defined by
@@ -40,19 +50,20 @@ def manipulate_saliency(input_image, R, delta_s):
     ################################
 
     # Initialize tau +/-
-    tau_plus = 0
-    tau_minus = 1 #TODO is it right ?
-    prev_tau_plus = tau_plus
-    prev_tau_minus = tau_minus
+    tau_positive = 0
+    tau_negative = 1
+    prev_tau_positive = tau_positive
+    prev_tau_negative = tau_negative
 
-    # Initialize the interational images buffers
-    J = [np.arraylike(input_image) for _ in range(2)]
+    # Initialize the interational images buffers (Try to keep them as [0,255] images)
+    J = np.array([np.zeros_like(input_image) for _ in range(2)])
+    J[0] = cv2.cvtColor(input_image, cv2.COLOR_RGB2Lab)
 
     # Initialize the saliency maps S_J
-    S_J = np.zeros_like(input_image)
+    S_J = np.zeros(input_image.shape[0:2])
 
     # Initialize the Database I_D +/-
-    I_D_plus, I_D_minus = [np.arraylike(input_image) for _ in range(2)]
+    # I_D_positive, I_D_negative = [np.zeros_like(input_image) for _ in range(2)]
     
 
     ##############################
@@ -60,30 +71,48 @@ def manipulate_saliency(input_image, R, delta_s):
     ##############################
 
     # TODO: make the coarse-to-fine iterations
+    print("\nBegin Saliency Manipulation:")
 
-    while compute_criterion(S_J, R, delta_s) > EPSILON:
+    # while compute_criterion(S_J, R, delta_s) > EPSILON:
+    for i in  range(nb_iterations):
+        print(f"Iteration {i}")
         # update the saliency map
-        S_J = compute_saliency_map(J[0], patch_size=5)
+        print(" - computing Saliency...")
+        S_J = compute_saliency_map(J[0])
+        print(" - Done.")
 
         # DB update
-        I_D_plus, I_D_minus = db.compute_database(tau_plus, tau_minus, J[0], S_J)
-
-        # Update tau +/-
-        tau_plus, tau_minus = update_taus(tau_plus, tau_minus, S_J, R, delta_s)
+        print(" - computing DB...")
+        D_positive, D_negative = compute_database(tau_positive, tau_negative, J[0], S_J)
+        print(f" - Done, DB+ size: {D_positive.shape[0]}, DB- size: {D_negative.shape[0]}")
         
+        # Construct and display the database's images
+        I_D_positive, I_D_negative = db.compute_image_database(J[0], D_positive, D_negative)
+
+        # utils.display_images([S_J, I_D_positive, I_D_negative])
 
         # update J to minimize the energy function
-        J[1] = opt.minimize_J(J[0], I_D_plus, I_D_minus, R)
+        print(" - Minimizing function...")
+        J[1] = minimize_J(J[0].astype(np.float64), R, D_positive, D_negative)
+        print(" - Done.")
+        # Update tau +/-
+        tau_positive, tau_negative = update_taus(tau_positive, tau_negative, S_J, R, delta_s)
 
         # switch the buffers (only affect the references so no copy is made)
-        temp = J[0]
+        temp = J[0].copy()
         J[0] = J[1]
         J[1] = temp
 
         # Check if convergence is reached by tau's
-        tau_diff = abs(tau_plus - prev_tau_plus) + abs(tau_minus - prev_tau_minus)
+        tau_diff = abs(tau_positive - prev_tau_positive) + abs(tau_negative - prev_tau_negative)
+        prev_tau_positive, prev_tau_negative = tau_positive, tau_negative
         if tau_diff < EPSILON:
             break
+
+        # print("\033[A\033[K\033[A\033[K\033[A\033[K\033[A\033[K\033[A\033[K\033[A\033[K\033[A\033[K", end="")
+
+    print("Done")
+    return cv2.cvtColor(J[0], cv2.COLOR_Lab2RGB)
 
 def phi(S_J, R):
     """
@@ -97,8 +126,22 @@ def phi(S_J, R):
     Returns:
         The saliency contrast between R and the rest of the image
     """
-    # TODO
-    pass    
+    thresh = 0.2
+    foreground = S_J.copy()
+    foreground[R == 0] = 0  # Inside target region
+    # Magic to retrive top 20%
+    min, max = np.min(foreground), np.max(foreground)
+    x,y = np.where(foreground < min + (1 - thresh) * (max - min))
+    foreground[x,y] = 0
+
+    background = S_J.copy()
+    background[R > 0] = 0  # Outside target region
+    # Magic to retrive top 20% by seting to 0 the other 80%
+    min, max = np.min(background), np.max(background)
+    x,y = np.where(background < min + (1 - thresh) * (max - min))
+    background[x,y] = 0
+
+    return foreground.mean() - background.mean()
 
 def compute_criterion(S_J, R, delta_s):
     """
@@ -111,10 +154,9 @@ def compute_criterion(S_J, R, delta_s):
     Returns: 
         The value of the criterion
     """
-    # TODO
     pass
 
-def update_taus(tau_plus, tau_minus, S_J, R, delta_s):
+def update_taus(tau_positive, tau_negative, S_J, R, delta_s, learning_rate=0.1):
     """
     Update the tau +/- values based on the saliency maps and the target saliency contrast
 
@@ -127,8 +169,12 @@ def update_taus(tau_plus, tau_minus, S_J, R, delta_s):
     Returns:
         The updated values of tau_plus and tau_minus
     """
-    # TODO
-    pass
+    # Adjust thresholds based on difference from desired contrast
+    adjustment = np.abs(phi(S_J, R) - delta_s) * learning_rate
+    tau_positive += adjustment
+    tau_negative -= adjustment
+
+    return tau_positive, tau_negative
         
 
 # Entry point
@@ -146,11 +192,26 @@ if __name__ == "__main__":
 
     # Read the image
     input_image = cv2.imread(image_path)
+    print("\n - Image size:", input_image.shape)
     input_image = cv2.cvtColor(input_image, cv2.COLOR_BGR2RGB)
+    
     mask_image = cv2.imread(mask_path)
-    mask_image = cv2.cvtColor(mask_image, cv2.COLOR_BGR2GRAY)
+    mask_image = cv2.cvtColor(mask_image, cv2.COLOR_BGR2GRAY)[:,:]
 
     # Call the main function
-    manipulate_saliency(input_image, mask_image, delta_s)
+    salient_image = manipulate_saliency(input_image, mask_image, delta_s)
+    
+    # Display the original image and the saliency map
+    plt.figure(figsize=(10,10))
+    plt.subplot(1,2,1)
+    plt.imshow(input_image)
+    plt.axis('off')
+    plt.subplot(1,2,2)
+    plt.imshow(salient_image, cmap='hot')
+    plt.axis('off')
 
+    # save the orinal image
+    # save_image(image, folder_path + "original_image.jpg")
+
+    plt.show()
     
