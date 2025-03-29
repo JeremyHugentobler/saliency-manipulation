@@ -2,6 +2,8 @@ import torch
 import numpy as np
 import cv2
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 def kldiv(s_map, gt):
     batch_size = s_map.size(0)
     w = s_map.size(1)
@@ -92,8 +94,8 @@ def nss(s_map, gt):
     if s_map.size() != gt.size():
         s_map = s_map.cpu().detach().numpy()
         s_map = torch.FloatTensor([cv2.resize(map, (gt.size(2), gt.size(1))) for map in s_map])
-        s_map = s_map.cuda()
-        gt = gt.cuda()
+        s_map = s_map.to(device)
+        gt = gt.to(device)
     
     assert s_map.size()==gt.size()
     batch_size = s_map.size(0)

@@ -8,6 +8,7 @@ import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--time_slices', default=5, type=int)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def generate_fixation_files(path, time_slices):
     print('Parsing fixations of ' + path + '...')
@@ -26,7 +27,7 @@ def generate_fixation_files(path, time_slices):
     sal_vol_path = create_dirs(SAL_VOL_PATH + str(time_slices))
     fix_vol_path = create_dirs(FIX_VOL_PATH + str(time_slices))
 
-    conv2D = GaussianBlur2D().cuda()
+    conv2D = GaussianBlur2D().to(device)
 
     print('Generating saliency volumes of ' + path + '...')
     for filename in tqdm(filenames):

@@ -96,8 +96,8 @@ model = PNASBoostedModelMultiLevel(device, model_checkpoint_path, model_checkpoi
 model = model.to(device)
 model.eval()
 
-
-image_path = "C:/Users/jerem/OneDrive/Pictures/20230115_115255.jpg"
+folder_path = "./data/debug/"
+image_path = folder_path + "easy_apple.jpg"
 
 # Read image
 image = get_image(image_path)
@@ -119,6 +119,6 @@ plt.imshow(img, cmap='hot')
 plt.axis('off')
 
 # save the orinal image
-save_image(image, "original_image.jpg")
+save_image(image, folder_path + "original_image.jpg")
 
 plt.show()
