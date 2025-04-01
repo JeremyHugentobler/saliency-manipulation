@@ -60,7 +60,7 @@ def minimize_J_global_poisson(J, R, d_positive, d_negative, patch_size=7):
     print("  - Applying Poisson Screening...")
 
     # TODO: see if it's ok to apply poisson screening on unpadded image
-    J_patched_padded = screed_poisson(J_paded, J_patched_padded, lambda_factor=5)
+    J_patched_padded = screen_poisson(J_paded, J_patched_padded, lambda_factor=5)
 
     print("\033[A\033[K\033[A\033[K", end="")
     # un-pad the image
@@ -115,7 +115,7 @@ def find_best_match(patch, database, J):
     return best_patch
 
 
-def screed_poisson(J, J_modified, lambda_factor):
+def screen_poisson(J, J_modified, lambda_factor):
     """
     Screened Poisson optimization to smoothly blend the patched image with the original image.
 

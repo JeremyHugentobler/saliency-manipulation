@@ -23,35 +23,32 @@ def display_image(result_image, input_image):
     # display
     plt.show()
 
-def display_images(image_list):
+def display_images(images, titles=[], imperrow=3):
     """
     Displays a whole list of images next to each other
 
     Args:
         imgae_list: A list of images to display
+        titles: A list of the corrsponding title (optional)
 
     Returns:
         None
     """
 
     # Compute number of rows
-    x = len(image_list)//3
-
-
-    # Create the figure
-    fig, axs = plt.subplots(x, 3)
+    x = len(images) // imperrow + 1
 
     # Fill the figure with the images
-    if x == 1:
-        for j in range(len(image_list)):
-            axs[j].imshow(image_list[j])
-            axs[j].axis('off')
-
-    else:
-        for i in range(x):
-            for j in range(3):
-                axs[i, j].imshow(image_list[i*3+j])
-                axs[i, j].axis('off')
+    plt.figure(figsize=(30,20))
+    for i in range(x):
+        l = len(images)%imperrow if i+1 == x else imperrow
+        for j in range(l):
+            idx = i*imperrow + j
+            plt.subplot(x+1, imperrow, idx+1)
+            plt.imshow(images[idx])
+            plt.axis('off')
+            if len(titles) != 0:
+                plt.title(titles[idx]) 
   
     # display
     plt.show()

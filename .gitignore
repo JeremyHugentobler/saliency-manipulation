@@ -3,3 +3,4 @@ Tempsal/src/__pycache__/*
 Tempsal/src/PNAS/__pycache__/*
 Tempsal/src/checkpoints/*
 data/coco_input/*
+__pycache__/*
