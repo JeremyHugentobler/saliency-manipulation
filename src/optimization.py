@@ -6,10 +6,10 @@ from scipy.sparse import diags
 
 # import matplotlib.pyplot as plt
 
-STRIDE = 7
-MAX_ITERATION = 40
+STRIDE = 3
+MAX_ITERATION = 10
 
-def minimize_J_global_poisson(J, R, d_positive, d_negative, patch_size=7):
+def minimize_J_global_poisson(J, R, d_positive, d_negative, patch_size=7, lambda_factor=5):
     """
     Core function that tries to minimize the following energy function:
         E(J,D+,D-) = E+ + E- + E_delta
@@ -21,50 +21,58 @@ def minimize_J_global_poisson(J, R, d_positive, d_negative, patch_size=7):
     width, height, _ = J.shape
     radius = patch_size // 2
 
-    ### PATCH-MATCH
+    ### SEARCH-AND-VOTE
     print("  - Applying PatchMatch...")
 
     # Pad the image so that the patch don't overlap. (dont look, just know it works)
     J_paded = np.stack([np.pad(J[:,:,i], radius, mode="reflect") for i in range(3)]).transpose(1,2,0)
-    J_patched = np.zeros_like(J_paded)
+    
+    # Create the mapping from a pixel location to (the current mean of the overlapping patches, number of elements. 
+    searched_patches_map = np.zeros((J_paded.shape[0], J_paded.shape[1], 4)) # 4 = (curr_r_mean, curr_g_mean, curr_b_mean, # seen pixels)
 
     # Loop through all upper-left corners of each patch
-    for x in range(0, width - radius-1, STRIDE):
-        for y in range(0, height - radius-1, STRIDE):
-            off_x = x + radius
-            off_y = y + radius
-            patch = J_paded[off_x:off_x+patch_size, off_y:off_y+patch_size]
-            mask_patch = R[x:x+patch_size, y:y+patch_size]
+    for x in range(0, width, STRIDE):
+        for y in range(0, height, STRIDE):
+            patch = J_paded[x:x+patch_size, y:y+patch_size]
+            # mask_patch = R[x:x+patch_size, y:y+patch_size]
 
-            if R[x + radius, y + radius] > 0 and len(d_positive) > 0:
+            if R[x, y] > 0 and len(d_positive) > 0:
                 # Inside the mask (more salient)
                 best_match = find_best_match(patch, d_positive, J_paded)
-                # best_match *= (mask_patch > 0)[:,:,None]               # keep only best match inside the mask
-                # best_match += patch * (mask_patch == 0)[:,:,None]      # add back the original image outside the mask
 
             elif len(d_negative) > 0:
                 # Outside the mask (less salient)
                 best_match = find_best_match(patch, d_negative, J_paded)
-                # best_match *= (mask_patch == 0)[:,:,None]           # keep only best match outside the mask
-                # best_match += patch * (mask_patch > 0)[:,:,None]    # add back the original image inside the mask
             else:
                 best_match = patch  # If DB is empty keep orignal patch
-            
-            
-            J_patched[off_x:off_x+patch_size, off_y:off_y+patch_size] = best_match  # Replace patch
+                
+            # VOTING STEP (but done on the fly)
 
-    crop = J_patched[radius:radius+width, radius:height+radius]
-    J_patched_padded = np.stack([np.pad(crop[:,:,i], radius, mode="reflect") for i in range(3)]).transpose(1,2,0)
+            # Set of pixel that need to be updated by the mean value of the patchmatch res
+            s = searched_patches_map[x:x+patch_size, y:y+patch_size]
+
+            # TODO: filter out what is not in the given "corect" region
+            
+            # new_mean (per pixel) = temp_mean * N/(N+p*p) + p_mean / N+p*p
+            n_plus_p2 = (s[:,:,3] + patch_size**2)
+            s[:,:,:-1] *= (s[:,:,3] / n_plus_p2)[:,:,None]
+            s[:,:,:-1] += np.ones_like(best_match) * best_match.sum(axis=(0,1)) / n_plus_p2[:,:,None]
+
+            # Update the intermidiate total number
+            s[:,:,-1] = n_plus_p2.copy()
+
+    # Remove temporary accumulator
+    J_patched_padded = searched_patches_map[:,:,:-1]
     
     ### SCREEN-POISSON
     print("  - Applying Poisson Screening...")
 
     # TODO: see if it's ok to apply poisson screening on unpadded image
-    J_patched_padded = screen_poisson(J_paded, J_patched_padded, lambda_factor=5)
+    J_patched_padded = screen_poisson(J_paded, J_patched_padded, lambda_factor=lambda_factor)
 
     print("\033[A\033[K\033[A\033[K", end="")
     # un-pad the image
-    return np.floor(J_patched_padded[radius:radius+width, radius:height+radius]).astype(np.uint8)
+    return np.floor(J_patched_padded[radius:-radius, radius:-radius]).astype(np.uint8)
 
 def minimize_J_local_poisson(J, R, d_positive, d_negative, patch_size=7):
     """
@@ -81,7 +89,7 @@ def minimize_J_local_poisson(J, R, d_positive, d_negative, patch_size=7):
 
 def compute_SSD(patch1, patch2):
     """Computes Sum of Square Distance (SSD) between two patches."""
-    return np.sum((patch1 - patch2) ** 2)
+    return np.sum((patch1.astype(np.float64) - patch2.astype(np.float64)) ** 2)
 
 def find_best_match(patch, database, J):
     """
@@ -128,8 +136,8 @@ def screen_poisson(J, J_modified, lambda_factor):
     """
     n, m, _ = J.shape
 
-    laplacian = cv2.Laplacian(J, cv2.CV_64F)
-    b = lambda_factor * J_modified - laplacian
+    laplacian = cv2.Laplacian(J.astype(np.float64), cv2.CV_64F)
+    b = lambda_factor * J_modified.astype(np.float64) - laplacian
     res = np.zeros_like(b)
 
     def A(x):
@@ -142,38 +150,6 @@ def screen_poisson(J, J_modified, lambda_factor):
         blended, _ = cg(LinearOperator((n*m, n*m), matvec=A), b[:,:,c].flatten(), x0=J[:,:,c].flatten())
         res[:,:,c] = blended.reshape((n,m))
     return res
-
-    # b = J_modified - J
-
-    # # Compute Laplacian Matrix
-    # n, m, _ = b.shape
-
-    # # Create the Laplacian operator for a 2D grid
-    # main_diag = -4 * np.ones(n * m)
-    # off_diag = np.ones(n * m - 1)
-    # off_diag[m-1::m] = 0  # Remove horizontal neighbors that should not connect
-
-    # # Create the sparse Laplacian matrix (for the 2D grid)
-    # diagonals = [main_diag, off_diag, off_diag, off_diag, off_diag]
-    # offsets = [0, -1, 1, -m, m]
-    # L = diags(diagonals, offsets, shape=(n * m, n * m), format="csr")
-    
-    # for c in range(3):
-    #     # Flatten the source term (b) to a 1D array
-    #     b_flat = b[:,:,c].flatten()
-
-    #     # Initial guess for phi (typically a zero array)
-    #     phi_init = np.zeros_like(b_flat)
-
-    #     # Solve the system A * phi = b using the Conjugate Gradient solver
-    #     phi_flat, _ = cg(L, b_flat, x0=phi_init)
-
-    #     J_modified[:,:,c] += lambda_factor * phi_flat.reshape(n, m)
-
-    # return J_modified
-
-    
-    # blended, _ = cg(lambda x: cv2.Laplacian(x, cv2.CV_64F) - lambda_factor * x, b.flatten())
 
 def local_screened_poisson(image, modified_patch, patch_coords, blend_patch_size):
     """

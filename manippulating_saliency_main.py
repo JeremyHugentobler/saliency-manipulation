@@ -30,7 +30,7 @@ compute_database = db.compute_location_database
 
 
 # Main function
-def manipulate_saliency(input_image, R, delta_s, nb_iterations=10):
+def manipulate_saliency(input_image, R, delta_s, max_iteration=10):
     """
     This is the main function that will implement the saliency manipulation algorithm
     as described in the paper. The input image will see its region of interest R defined by
@@ -74,7 +74,7 @@ def manipulate_saliency(input_image, R, delta_s, nb_iterations=10):
     print("\nBegin Saliency Manipulation:")
 
     # while compute_criterion(S_J, R, delta_s) > EPSILON:
-    for i in  range(nb_iterations):
+    for i in  range(max_iteration):
         print(f"Iteration {i}")
         # update the saliency map
         print(" - computing Saliency...")
@@ -93,7 +93,7 @@ def manipulate_saliency(input_image, R, delta_s, nb_iterations=10):
 
         # update J to minimize the energy function
         print(" - Minimizing function...")
-        J[1] = minimize_J(J[0].astype(np.float64), R, D_positive, D_negative)
+        J[1] = minimize_J(J[0], R, D_positive, D_negative)
         print(" - Done.")
         # Update tau +/-
         tau_positive, tau_negative = update_taus(tau_positive, tau_negative, S_J, R, delta_s)
@@ -107,6 +107,10 @@ def manipulate_saliency(input_image, R, delta_s, nb_iterations=10):
         tau_diff = abs(tau_positive - prev_tau_positive) + abs(tau_negative - prev_tau_negative)
         prev_tau_positive, prev_tau_negative = tau_positive, tau_negative
         if tau_diff < EPSILON:
+            break
+        
+        # Check if convergence is reached by delta_s
+        if compute_criterion(S_J, R, delta_s) > EPSILON:
             break
 
         # print("\033[A\033[K\033[A\033[K\033[A\033[K\033[A\033[K\033[A\033[K\033[A\033[K\033[A\033[K", end="")
@@ -154,7 +158,7 @@ def compute_criterion(S_J, R, delta_s):
     Returns: 
         The value of the criterion
     """
-    pass
+    return np.abs(phi(S_J, R) - delta_s)
 
 def update_taus(tau_positive, tau_negative, S_J, R, delta_s, learning_rate=0.1):
     """
