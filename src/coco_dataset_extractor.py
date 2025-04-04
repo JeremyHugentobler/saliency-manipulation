@@ -31,14 +31,14 @@ if __name__ == "__main__":
     
     # Get annotations
     imgIds = coco.getImgIds()
-    img = coco.loadImgs(imgIds[4])[0]
+    img = coco.loadImgs(imgIds[100])[0]
     anns = coco.loadAnns(coco.getAnnIds(imgIds=img['id'], catIds=category_ids, iscrowd=None))
     
     # Display image with annotations
     img_path = get_picture_path(img)
     image = Image.open(img_path)   
         
-    mask = coco.annToMask(anns[2])
+    mask = coco.annToMask(anns[0])
     # add the mask to the image
     image_out = np.array(image)
     mask = np.array(mask)
