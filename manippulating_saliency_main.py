@@ -30,7 +30,7 @@ compute_database = db.compute_location_database
 
 
 # Main function
-def manipulate_saliency(input_image, R, delta_s, max_iteration=10):
+def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7):
     """
     This is the main function that will implement the saliency manipulation algorithm
     as described in the paper. The input image will see its region of interest R defined by
@@ -41,6 +41,8 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10):
         input_image: The input image
         R: The mask defining the region of interest
         delta_s: The saliency contrast to be achieved
+        max_iteration: max number of iterations 
+        patch_size: the size used by the patch-match function
     Returns:
         None
     """
@@ -61,6 +63,12 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10):
 
     # Initialize the saliency maps S_J
     S_J = np.zeros(input_image.shape[0:2])
+
+    # Erode the mask so that only patches within are modified
+    
+    radius = patch_size // 2
+    kernel = np.ones((radius, radius))
+    mask_image = cv2.erode(R, kernel)
 
     # Initialize the Database I_D +/-
     # I_D_positive, I_D_negative = [np.zeros_like(input_image) for _ in range(2)]
@@ -93,10 +101,10 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10):
 
         # update J to minimize the energy function
         print(" - Minimizing function...")
-        J[1] = minimize_J(J[0], R, D_positive, D_negative)
+        J[1] = minimize_J(J[0], mask_image, D_positive, D_negative, patch_size)
         print(" - Done.")
         # Update tau +/-
-        tau_positive, tau_negative = update_taus(tau_positive, tau_negative, S_J, R, delta_s)
+        tau_positive, tau_negative = update_taus(tau_positive, tau_negative, S_J, mask_image, delta_s)
 
         # switch the buffers (only affect the references so no copy is made)
         temp = J[0].copy()
@@ -110,7 +118,7 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10):
             break
         
         # Check if convergence is reached by delta_s
-        if compute_criterion(S_J, R, delta_s) > EPSILON:
+        if compute_criterion(S_J, mask_image, delta_s) > EPSILON:
             break
 
         # print("\033[A\033[K\033[A\033[K\033[A\033[K\033[A\033[K\033[A\033[K\033[A\033[K\033[A\033[K", end="")

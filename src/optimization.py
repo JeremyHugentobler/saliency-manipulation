@@ -6,7 +6,7 @@ from scipy.sparse import diags
 
 # import matplotlib.pyplot as plt
 
-STRIDE = 3
+STRIDE = 1
 MAX_ITERATION = 10
 
 def minimize_J_global_poisson(J, R, d_positive, d_negative, patch_size=7, lambda_factor=5):
@@ -51,8 +51,6 @@ def minimize_J_global_poisson(J, R, d_positive, d_negative, patch_size=7, lambda
             # Set of pixel that need to be updated by the mean value of the patchmatch res
             s = searched_patches_map[x:x+patch_size, y:y+patch_size]
 
-            # TODO: filter out what is not in the given "corect" region
-            
             # new_mean (per pixel) = temp_mean * N/(N+p*p) + p_mean / N+p*p
             n_plus_p2 = (s[:,:,3] + patch_size**2)
             s[:,:,:-1] *= (s[:,:,3] / n_plus_p2)[:,:,None]
