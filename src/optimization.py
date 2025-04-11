@@ -88,7 +88,9 @@ def minimize_J_local_poisson(J, R, d_positive, d_negative, patch_size=7):
     pass
 
 def compute_SSD(patch1, patch2):
-    """Computes Sum of Square Distance (SSD) between two patches."""
+    """Computes Sum of Square Distance (SSD) between two patches of the same shape."""
+    if patch1.shape != patch2.shape:
+        return np.inf  # Incompatible patches — skip them
     return np.sum((patch1.astype(np.float64) - patch2.astype(np.float64)) ** 2)
 
 def find_best_match(patch, database, J):
