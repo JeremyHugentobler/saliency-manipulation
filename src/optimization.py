@@ -135,7 +135,6 @@ def screen_poisson(J, J_modified, lambda_factor):
         The blended image
     """
     n, m, _ = J.shape
-
     laplacian = cv2.Laplacian(J.astype(np.float64), cv2.CV_64F)
     b = lambda_factor * J_modified.astype(np.float64) - laplacian
     res = np.zeros_like(b)
@@ -147,7 +146,7 @@ def screen_poisson(J, J_modified, lambda_factor):
         return lambda_factor * x - lap.flatten()
 
     for c in range(3):
-        blended, _ = cg(LinearOperator((n*m, n*m), matvec=A), b[:,:,c].flatten(), x0=J[:,:,c].flatten())
+        blended, _ = cg(LinearOperator((n*m, n*m), matvec=A), b[:,:,c].flatten(), x0=J[:,:,c].flatten().astype(np.float64))
         res[:,:,c] = blended.reshape((n,m))
     return res
 
