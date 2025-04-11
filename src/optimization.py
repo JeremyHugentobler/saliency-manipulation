@@ -194,3 +194,55 @@ def local_screened_poisson(image, modified_patch, patch_coords, blend_patch_size
     blended_image[y1:y2, x1:x2] = blended_patch
 
     return blended_image
+
+
+def get_pyramids(image, levels):
+    """
+    Generate Gaussian and Laplacian pyramids for the given image.
+    To reconstruct, use the reconstruct function. Warning
+    
+    Args:
+        image (numpy.ndarray): Input image.
+        levels (int): Number of levels in the pyramid. (divide by 2 each time)
+
+    Returns:
+        tuple: Gaussian and Laplacian pyramids.
+    """
+    
+    gaussian_pyramid = [image]
+    laplacian_pyramid = []
+
+    # Build Gaussian pyramid
+    for i in range(levels):
+        image = cv2.pyrDown(image)
+        gaussian_pyramid.append(image)
+    
+    # From them, we can derive the laplacians
+    for i in range(levels):
+        original = gaussian_pyramid[i]
+        downscaled = gaussian_pyramid[i+1]
+        upscaled = cv2.pyrUp(downscaled, dstsize=original.shape[:2][::-1])
+        
+        laplacian = cv2.subtract(original, upscaled)
+        laplacian_pyramid.append(laplacian)
+    
+    return gaussian_pyramid, laplacian_pyramid
+
+def reconstruct(downscaled_image, laplacian_higher):
+    """
+    Reconstruct the image from its Laplacian pyramid and the downscaled image.
+
+    Args:
+        downscaled_image (numpy.ndarray): The downscaled image from the Gaussian pyramid.
+        laplacian_higher (numpy.ndarray): The Laplacian image from the higher level.
+
+    Returns:
+        numpy.ndarray: The reconstructed image.
+    """
+    
+    # Upscale the downscaled image to match the size of the Laplacian image
+    upscaled_image = cv2.pyrUp(downscaled_image)
+
+    reconstructed_image = cv2.add(upscaled_image, laplacian_higher)
+
+    return reconstructed_image
