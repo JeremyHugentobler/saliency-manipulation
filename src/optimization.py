@@ -172,8 +172,8 @@ def minimize_off_field_dist(off_field, J, R, patch_size, database):
         else:
             ### search mode
             for i in range(width):
-                if i%50==0:
-                    print(f"    - row {i} out of {width}")
+                # if i%50==0:
+                    # print(f"    - row {i} out of {width}")
                 for j in range(height):
                     if not (R[i,j]>0):
                         continue
@@ -187,11 +187,11 @@ def minimize_off_field_dist(off_field, J, R, patch_size, database):
         off_field_info["mean"].append(off_field[:,:,2].mean())
         off_field_info["median"].append(np.median(off_field[:,:,2]))
     # plt.plot(off_field_info["max"], label="max")
-    plt.plot(off_field_info["min"], label="min")
-    plt.plot(off_field_info["mean"], label="mean")
-    plt.plot(off_field_info["median"], label="median")
-    plt.legend(loc="upper left")
-    plt.show()
+    # plt.plot(off_field_info["min"], label="min")
+    # plt.plot(off_field_info["mean"], label="mean")
+    # plt.plot(off_field_info["median"], label="median")
+    # plt.legend(loc="upper left")
+    # plt.show()
     return off_field
 
 def propagate(off_field, R, mode):
