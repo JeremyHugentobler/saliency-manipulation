@@ -8,10 +8,16 @@ import torch
 from src.tempsal_wrapper import compute_saliency_map
 
 def tempsal_saliency(image):
-    saliency = compute_saliency_map(image)
-
+    saliency = compute_saliency_map(image).mean(axis=2)
     # Scale the map so that max value = 1
-    return saliency[:,:,0] / saliency.max()
+    saliency /= saliency.max()
+
+    # Linearize the values
+    # s_map_linear = np.log(saliency)
+    # s_map_linear /= np.min(s_map_linear)
+    # s_map_linear = 1 - s_map_linear
+
+    return saliency
 
 def paper_saliancy():
     """
@@ -87,12 +93,13 @@ def apply_saliancy(input_image, saliancy_map, alpha):
 
     # output_image = input_image + saliancy_map * alpha
     output_image = np.clip(output_image, 0, 255).astype(np.uint8)
+    
 
     return output_image
 
 def apply_range_of_saliancy(input_image, saliancy_map, alphas):
     output_images = []
-
+# 
     for alpha in alphas:
         modified_image = apply_saliancy(input_image, saliancy_map, alpha)
         output_images.append(modified_image)
