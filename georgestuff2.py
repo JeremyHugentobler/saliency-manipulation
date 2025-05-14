@@ -1,10 +1,14 @@
-import numpy as np
-from scipy.spatial import distance
-from scipy.spatial import KDTree
-from skimage.metrics import structural_similarity as ssim
 
-import cv2
 import numpy as np
+import matplotlib.pyplot as plt
+import cv2, skimage, os, sys
+
+# Local imports
+from src import saliancy_map as sm
+from src import utils
+from src import optimization as opt
+from src import database as db
+
 
 def local_screened_poisson(image, modified_patch, patch_coords, blend_patch_size):
     """
@@ -100,9 +104,6 @@ def find_best_match_mse(patch, database):
 
 
 
-
-
-
 def compute_ssim(patch1, patch2):
     """Computes Structural Similarity Index (SSIM) between two patches."""
     return ssim(patch1, patch2, multichannel=True, data_range=patch2.max() - patch2.min())
@@ -188,7 +189,7 @@ def update_thresholds(saliency_map, mask, tau_positive, tau_negative, delta_s, l
 
 
 def compute_saliency_map(image):
-    ####################### TO BE DEFINED ############################
+    saliency_map=sm.tempsal_saliency(image)
 
     return saliency_map
 
@@ -260,3 +261,35 @@ def manipulate_saliency(image, mask, delta_s=0.6, max_iterations=20, patch_size=
             break
 
     return manipulated_image
+
+
+def main(image_path, mask_path, output_path, delta_s=0.6, patch_size=7, blend_size=11, max_iterations=2):
+    """
+    Entry point to run the full saliency manipulation pipeline.
+    """
+    # Load image and mask
+    image = cv2.imread(image_path)
+    mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
+    if image is None or mask is None:
+        raise FileNotFoundError("Image or mask could not be loaded.")
+
+    # Run saliency-guided manipulation
+    result = manipulate_saliency(
+        image=image,
+        mask=mask,
+        delta_s=delta_s,
+        max_iterations=max_iterations,
+        patch_size=patch_size,
+        blend_size=blend_size
+    )
+
+    # Save result
+    cv2.imwrite(output_path, result)
+    print(f"Saved output to {output_path}")
+
+
+if __name__ == "__main__":
+    image_path = "output/Apple.png"
+    mask_path = "output/AppleMask.png"
+    output_path = "output/apple_modified.png"
+    main(image_path, mask_path, output_path)
