@@ -79,24 +79,11 @@ def minimize_J_global_poisson(J, R, d_positive, d_negative, patch_size=7, lambda
     print("  - Applying Poisson Screening...")
 
     # TODO: see if it's ok to apply poisson screening on unpadded image
-    J_patched_padded = screen_poisson(J_paded, J_patched_padded, lambda_factor=lambda_factor)
+    # J_patched_padded = screen_poisson(J_paded, J_patched_padded, lambda_factor=lambda_factor)
 
     print("\033[A\033[K\033[A\033[K", end="")
     # un-pad the image
     return np.floor(J_patched_padded[radius:-radius, radius:-radius]).astype(np.uint8)
-
-def minimize_J_local_poisson(J, R, d_positive, d_negative, patch_size=7):
-    """
-    Core function that tries to minimize the following energy function:
-        E(J,D+,D-) = E+ + E- + E_delta
-    where:  E+ = sum{p in R}( min{q in D+} (D(p,q)) )
-            E- = sum{p not in R}( min{q in D+} ((D(p,q)) )
-            E_delta = ||grad_J - grad_I||
-    Apply poisson screening on the local image
-    """
-
-    #TODO
-    pass
 
 def compute_SSD(patch1, patch2):
     """Computes Sum of Square Distance (SSD) between two patches of the same shape."""
@@ -180,10 +167,11 @@ def minimize_off_field_dist(off_field, J, R, patch_size, database):
                     if not (R[i,j]>0):
                         continue
                     # max_r = min(width, height)
-                    max_r = 64
-            off_field[i,j] = random_patch_search_radius(
-                (i,j), off_field[i,j,:2].astype(np.int32), off_field[i,j,2], 
-                patch_size, database, J, max_r)
+                    max_r = 8
+                    off_field[i,j] = random_patch_search_radius(
+                        (i,j), off_field[i,j,:2].astype(np.int32), off_field[i,j,2], 
+                        patch_size, database, J, max_r
+                    )
         off_field_info["max"].append(off_field[:,:,2].max())
         off_field_info["min"].append(off_field[:,:,2].min())
         off_field_info["mean"].append(off_field[:,:,2].mean())
@@ -209,8 +197,8 @@ def propagate(off_field, R, mode):
         h_range = range(1,h)
     else:
         delta = -1
-        w_range = range(w-1,0,-1)
-        h_range = range(h-1,0,-1)
+        w_range = range(w-2,0,-1)
+        h_range = range(h-2,0,-1)
     
     for i in w_range:
         for j in h_range:
@@ -278,8 +266,6 @@ def random_patch_search_radius(p_coord, offset, curr_dist, patch_size, database,
 
         r = r//2
     return (offset[0], offset[1], curr_dist)
-
-         
 
 
 def random_patch_search_SSD(patch, database, J):
