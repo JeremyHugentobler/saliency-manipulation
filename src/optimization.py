@@ -209,8 +209,8 @@ def propagate(off_field, R, mode):
         h_range = range(1,h)
     else:
         delta = -1
-        w_range = range(w-1,0,-1)
-        h_range = range(h-1,0,-1)
+        w_range = range(w-2,0,-1)
+        h_range = range(h-2,0,-1)
     
     for i in w_range:
         for j in h_range:
