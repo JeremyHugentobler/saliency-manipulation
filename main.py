@@ -10,6 +10,7 @@ from src import saliancy_map as sm
 from src import utils
 from src import optimization as opt
 from src import database as db
+from src.optimization import get_pyramids, reconstruct
 
 # Constants
 
@@ -17,7 +18,7 @@ from src import database as db
 # DEBUG_IMAGES_PATH = DATA_PATH + "debug/"
 # DEFAULT_IMAGE = DEBUG_IMAGES_PATH + "easy_apple.jpg"
 
-EPSILON = 1e-3
+EPSILON = 1e-4
 
 
 ############################
@@ -115,10 +116,12 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7)
         tau_diff = abs(tau_positive - prev_tau_positive) + abs(tau_negative - prev_tau_negative)
         prev_tau_positive, prev_tau_negative = tau_positive, tau_negative
         if tau_diff < EPSILON:
-            break
+            #break
+            pass
         
         # Check if convergence is reached by delta_s
-        if compute_criterion(S_J, mask_image, delta_s) > EPSILON:
+        if compute_criterion(S_J, mask_image, delta_s) < EPSILON:
+            print(f" - Convergence reached.{compute_criterion(S_J, mask_image, delta_s)}")
             break
 
         # print("\033[A\033[K\033[A\033[K\033[A\033[K\033[A\033[K\033[A\033[K\033[A\033[K\033[A\033[K", end="")
@@ -191,24 +194,32 @@ def update_taus(tau_positive, tau_negative, S_J, R, delta_s, learning_rate=0.1):
 
 # Entry point
 if __name__ == "__main__":
-    # Check the number of arguments
-    # if len(sys.argv) == 2:
-    #     image_path = sys.argv[1]
-    # else:
-    #     image_path = DEFAULT_IMAGE
 
     assert len(sys.argv) == 4, "Usage: python manipulating_saliency_main.py <image_path> <mask_path> <delta_s>"
     image_path = sys.argv[1]
     mask_path = sys.argv[2]
     delta_s = float(sys.argv[3])
+    
+    # Check that the path corresponds to existing files
+    if not os.path.isfile(image_path) or not os.path.isfile(mask_path):
+        raise FileNotFoundError(f"Path {image_path} does not exist.")
 
-    # Read the image
+    # Read the images
     input_image = cv2.imread(image_path)
     print("\n - Image size:", input_image.shape)
     input_image = cv2.cvtColor(input_image, cv2.COLOR_BGR2RGB)
     
     mask_image = cv2.imread(mask_path)
     mask_image = cv2.cvtColor(mask_image, cv2.COLOR_BGR2GRAY)[:,:]
+
+    # Compute the pyramids
+    pyramids = get_pyramids(input_image, 3)
+    mask_pyramids = get_pyramids(mask_image, 3)
+    
+    # TEMP
+    input_image = pyramids[0][2]
+    
+    mask_image = mask_pyramids[0][2]
 
     # Call the main function
     salient_image = manipulate_saliency(input_image, mask_image, delta_s)
