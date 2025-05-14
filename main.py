@@ -1,4 +1,4 @@
-# USAGE EXEMPLE: python .\manippulating_saliency_main.py .\data\debug\easy_apple_small.jpg .\data\debug\easy_apple_mask_small.jpg 0.1
+# USAGE EXEMPLE: python .\main.py .\data\debug\easy_apple_small.jpg .\data\debug\easy_apple_small_mask.jpg 0.1
 
 # Libraries imports
 import numpy as np
