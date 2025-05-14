@@ -52,8 +52,8 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7)
     ################################
 
     # Initialize tau +/-
-    tau_positive = 0
-    tau_negative = 1
+    tau_positive = 0.5
+    tau_negative = 0.5
     prev_tau_positive = tau_positive
     prev_tau_negative = tau_negative
 
