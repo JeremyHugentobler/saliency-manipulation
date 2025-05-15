@@ -44,18 +44,7 @@ def minimize_J_global_poisson(J, R, d_positive, d_negative, patch_size=7, lambda
     # Loop through all upper-left corners of each patch
     for x in range(0, width, STRIDE):
         for y in range(0, height, STRIDE):
-            # patch = J_paded[x:x+patch_size, y:y+patch_size]
-            # # mask_patch = R[x:x+patch_size, y:y+patch_size]
-
-            # if R[x, y] > 0 and len(d_positive) > 0:
-            #     # Inside the mask (more salient)
-            #     best_match = random_patch_search_SSD(patch, d_positive, J_paded)
-
-            # elif len(d_negative) > 0:
-            #     # Outside the mask (less salient)
-            #     best_match = random_patch_search_SSD(patch, d_negative, J_paded)
-            # else:
-            #     best_match = patch  # If DB is empty keep orignal patch
+            
             bm_x, bm_y = (x,y) + off_field[x,y,:2].astype(np.int32)
             best_match = J_paded[bm_x:bm_x+patch_size, bm_y:bm_y+patch_size]
             
@@ -79,11 +68,24 @@ def minimize_J_global_poisson(J, R, d_positive, d_negative, patch_size=7, lambda
     print("  - Applying Poisson Screening...")
 
     # TODO: see if it's ok to apply poisson screening on unpadded image
-    # J_patched_padded = screen_poisson(J_paded, J_patched_padded, lambda_factor=lambda_factor)
+    J_patched_padded = screen_poisson(J_paded, J_patched_padded, lambda_factor=lambda_factor)
 
     print("\033[A\033[K\033[A\033[K", end="")
     # un-pad the image
     return np.floor(J_patched_padded[radius:-radius, radius:-radius]).astype(np.uint8)
+
+def minimize_J_local_poisson(J, R, d_positive, d_negative, patch_size=7):
+    """
+    Core function that tries to minimize the following energy function:
+        E(J,D+,D-) = E+ + E- + E_delta
+    where:  E+ = sum{p in R}( min{q in D+} (D(p,q)) )
+            E- = sum{p not in R}( min{q in D+} ((D(p,q)) )
+            E_delta = ||grad_J - grad_I||
+    Apply poisson screening on the local image
+    """
+
+    #TODO
+    pass
 
 def compute_SSD(patch1, patch2):
     """Computes Sum of Square Distance (SSD) between two patches of the same shape."""
@@ -136,14 +138,6 @@ def minimize_off_field_dist(off_field, J, R, patch_size, database):
         fa F(x,y) = (x_off, y_off, d): d = SSD(patch(x,y), patch(x+x_off, y+y_off)) is minimized
     Note that if (x,y) in R, (x+x_off, y+y_off) is also in R (similar with not R)
     """
-    width, height = R.shape
-    off_field_info = {
-        "min": [],
-        "max": [],
-        "mean": [],
-        "median": []
-    }
-
     # Iterate and alternate between search and propagate
     for i in range(PATCH_MATCH_MAX_ITER):
         print(f"   - Iteration {i}")            
@@ -167,21 +161,10 @@ def minimize_off_field_dist(off_field, J, R, patch_size, database):
                     if not (R[i,j]>0):
                         continue
                     # max_r = min(width, height)
-                    max_r = 8
-                    off_field[i,j] = random_patch_search_radius(
-                        (i,j), off_field[i,j,:2].astype(np.int32), off_field[i,j,2], 
-                        patch_size, database, J, max_r
-                    )
-        off_field_info["max"].append(off_field[:,:,2].max())
-        off_field_info["min"].append(off_field[:,:,2].min())
-        off_field_info["mean"].append(off_field[:,:,2].mean())
-        off_field_info["median"].append(np.median(off_field[:,:,2]))
-    # plt.plot(off_field_info["max"], label="max")
-    # plt.plot(off_field_info["min"], label="min")
-    # plt.plot(off_field_info["mean"], label="mean")
-    # plt.plot(off_field_info["median"], label="median")
-    # plt.legend(loc="upper left")
-    # plt.show()
+                    max_r = 64
+            off_field[i,j] = random_patch_search_radius(
+                (i,j), off_field[i,j,:2].astype(np.int32), off_field[i,j,2], 
+                patch_size, database, J, max_r)
     return off_field
 
 def propagate(off_field, R, mode):
@@ -266,6 +249,8 @@ def random_patch_search_radius(p_coord, offset, curr_dist, patch_size, database,
 
         r = r//2
     return (offset[0], offset[1], curr_dist)
+
+         
 
 
 def random_patch_search_SSD(patch, database, J):
