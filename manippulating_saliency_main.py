@@ -1,4 +1,4 @@
-# USAGE EXEMPLE: python .\manippulating_saliency_main.py .\data\debug\easy_apple_small.jpg .\data\debug\easy_apple_mask_small.jpg 0.1
+# USAGE EXEMPLE: python .\manippulating_saliency_main.py .\data\debug\easy_apple_small.jpg .\data\debug\easy_apple_small_mask.jpg 0.1
 
 # Libraries imports
 import numpy as np
@@ -52,8 +52,8 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7)
     ################################
 
     # Initialize tau +/-
-    tau_positive = 0.5
-    tau_negative = 0.5
+    tau_positive = 0.1
+    tau_negative = 0.1
     prev_tau_positive = tau_positive
     prev_tau_negative = tau_negative
 
@@ -91,17 +91,17 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7)
 
         # DB update
         print(" - computing DB...")
-        D_positive, D_negative = compute_database(tau_positive, tau_negative, J[0], S_J)
+        D_positive, D_negative, D_pos_mask, D_neg_mask = compute_database(tau_positive, tau_negative, J[0], S_J)
         print(f" - Done, DB+ size: {D_positive.shape[0]}, DB- size: {D_negative.shape[0]}")
         
         # Construct and display the database's images
-        I_D_positive, I_D_negative = db.compute_image_database(J[0], D_positive, D_negative)
+        # I_D_positive, I_D_negative = db.compute_image_database(J[0], D_positive, D_negative)
 
         # utils.display_images([S_J, I_D_positive, I_D_negative])
 
         # update J to minimize the energy function
         print(" - Minimizing function...")
-        J[1] = minimize_J(J[0], mask_image, D_positive, D_negative, patch_size)
+        J[1] = minimize_J(J[0], mask_image, D_positive, D_negative, D_pos_mask, D_neg_mask, patch_size)
         print(" - Done.")
         # Update tau +/-
         tau_positive, tau_negative = update_taus(tau_positive, tau_negative, S_J, mask_image, delta_s)
@@ -204,19 +204,30 @@ if __name__ == "__main__":
 
     # Read the image
     input_image = cv2.imread(image_path)
-    print("\n - Image size:", input_image.shape)
+    scale = 1
+    print("\n - Image size:", input_image.shape, "divided by:", scale)
     input_image = cv2.cvtColor(input_image, cv2.COLOR_BGR2RGB)
-    
+
+    # Read Mask    
     mask_image = cv2.imread(mask_path)
     mask_image = cv2.cvtColor(mask_image, cv2.COLOR_BGR2GRAY)[:,:]
 
+    # Re binearize the mask
+    non_zeros = np.where(mask_image != 0)
+    mask_image[non_zeros] = 1
+
+    # Down sample the image and mask for faster tests
+    down_sampled = input_image[::scale,::scale,]
+    down_sampled_masked = mask_image[::scale,::scale,]
+
+
     # Call the main function
-    salient_image = manipulate_saliency(input_image, mask_image, delta_s)
+    salient_image = manipulate_saliency(down_sampled, down_sampled_masked, delta_s)
     
     # Display the original image and the saliency map
     plt.figure(figsize=(10,10))
     plt.subplot(1,2,1)
-    plt.imshow(input_image)
+    plt.imshow(down_sampled)
     plt.axis('off')
     plt.subplot(1,2,2)
     plt.imshow(salient_image, cmap='hot')
