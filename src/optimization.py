@@ -4,14 +4,14 @@ from scipy.sparse.linalg import cg
 from scipy.sparse.linalg import LinearOperator
 from scipy.sparse import diags
 import matplotlib.pyplot as plt
-
+from tqdm import tqdm
 # import matplotlib.pyplot as plt
 
 STRIDE = 1
 MAX_ITERATION = 10
 PATCH_MATCH_MAX_ITER = 2*5 # each "iterartion" is (rdm search + propagate)
 
-def minimize_J_global_poisson(J, R, d_positive, d_negative, patch_size=7, lambda_factor=5):
+def minimize_J_global_poisson(J, R, d_positive, d_negative, patch_size=7, lambda_factor=0.05):
     """
     Core function that tries to minimize the following energy function:
         E(J,D+,D-) = E+ + E- + E_delta
@@ -139,32 +139,32 @@ def minimize_off_field_dist(off_field, J, R, patch_size, database):
     Note that if (x,y) in R, (x+x_off, y+y_off) is also in R (similar with not R)
     """
     # Iterate and alternate between search and propagate
-    for i in range(PATCH_MATCH_MAX_ITER):
-        print(f"   - Iteration {i}")            
-        if i%2 == 0:
-            ### propagate mode
-            p_mode = (i/2)%2
-            off_field = propagate(off_field, R, p_mode)
-            idxs = np.indices((width, height)).transpose(1,2,0)
-            val = idxs + off_field[:,:,:2]
-            if np.any(np.logical_or(val[:,:,0] >= width, val[:,:,1] >= height)):
-                faulty = np.where((np.logical_or(val[:,:,0] >= width, val[:,:,1] >= height)))
-                print(off_field[faulty])
-                raise Exception("What the fuck ?")
+    for i in tqdm(range(PATCH_MATCH_MAX_ITER)):
+        # if i%2 == 0:
+        width, height = R.shape
+        ### propagate mode
+        p_mode = i%2
+        off_field = propagate(off_field, R, p_mode)
+        idxs = np.indices((width, height)).transpose(1,2,0)
+        val = idxs + off_field[:,:,:2]
+        if np.any(np.logical_or(val[:,:,0] >= width, val[:,:,1] >= height)):
+            faulty = np.where((np.logical_or(val[:,:,0] >= width, val[:,:,1] >= height)))
+            print(off_field[faulty])
+            raise Exception("What the fuck ?")
                 
-        else:
-            ### search mode
-            for i in range(width):
-                # if i%50==0:
-                    # print(f"    - row {i} out of {width}")
-                for j in range(height):
-                    if not (R[i,j]>0):
-                        continue
-                    # max_r = min(width, height)
-                    max_r = 64
-            off_field[i,j] = random_patch_search_radius(
-                (i,j), off_field[i,j,:2].astype(np.int32), off_field[i,j,2], 
-                patch_size, database, J, max_r)
+        # else:
+        #     ### search mode
+        #     for i in range(width):
+        #         # if i%50==0:
+        #             # print(f"    - row {i} out of {width}")
+        #         for j in range(height):
+        #             if not (R[i,j]>0):
+        #                 continue
+        #             # max_r = min(width, height)
+        #             max_r = 8
+        #             off_field[i,j] = random_patch_search_radius(
+        #                 (i,j), off_field[i,j,:2].astype(np.int32), off_field[i,j,2], 
+        #                 patch_size, database, J, max_r
     return off_field
 
 def propagate(off_field, R, mode):
