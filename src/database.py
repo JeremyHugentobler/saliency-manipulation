@@ -37,14 +37,23 @@ def compute_location_database(tau_plus, tau_minus, J, S_J):
         R: The region of interest
 
     Returns:
-        The database of patches D+ or D-
+        D_plus, D_minus: The database of patches D+ or D-
+        D_plus_mask, D_minus_mask: The masks of the DB's
     """
     # Positive DB
     x,y = np.where(S_J > tau_plus)
     D_plus = np.hstack([x[:, None], y[:, None]])
 
+    D_plus_mask = np.zeros_like(S_J)
+    D_plus_mask[x,y] = 1
+
     # Positive DB
     x,y = np.where(S_J < tau_minus)
     D_minus = np.hstack([x[:, None], y[:, None]])
 
-    return D_plus, D_minus
+    D_minus_mask = np.zeros_like(S_J)
+    D_minus_mask[x,y] = 1
+
+
+
+    return D_plus, D_minus, D_plus_mask, D_minus_mask

@@ -53,8 +53,8 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7)
     ################################
 
     # Initialize tau +/-
-    tau_positive = 0.5
-    tau_negative = 0.5
+    tau_positive = 0.1
+    tau_negative = 0.1
     prev_tau_positive = tau_positive
     prev_tau_negative = tau_negative
 
@@ -92,17 +92,17 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7)
 
         # DB update
         print(" - computing DB...")
-        D_positive, D_negative = compute_database(tau_positive, tau_negative, J[0], S_J)
+        D_positive, D_negative, D_pos_mask, D_neg_mask = compute_database(tau_positive, tau_negative, J[0], S_J)
         print(f" - Done, DB+ size: {D_positive.shape[0]}, DB- size: {D_negative.shape[0]}")
         
         # Construct and display the database's images
-        I_D_positive, I_D_negative = db.compute_image_database(J[0], D_positive, D_negative)
+        # I_D_positive, I_D_negative = db.compute_image_database(J[0], D_positive, D_negative)
 
         # utils.display_images([S_J, I_D_positive, I_D_negative])
 
         # update J to minimize the energy function
         print(" - Minimizing function...")
-        J[1] = minimize_J(J[0], mask_image, D_positive, D_negative, patch_size)
+        J[1] = minimize_J(J[0], mask_image, D_positive, D_negative, D_pos_mask, D_neg_mask, patch_size)
         print(" - Done.")
         # Update tau +/-
         tau_positive, tau_negative = update_taus(tau_positive, tau_negative, S_J, mask_image, delta_s)
@@ -116,12 +116,10 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7)
         tau_diff = abs(tau_positive - prev_tau_positive) + abs(tau_negative - prev_tau_negative)
         prev_tau_positive, prev_tau_negative = tau_positive, tau_negative
         if tau_diff < EPSILON:
-            #break
-            pass
+            break
         
         # Check if convergence is reached by delta_s
-        if compute_criterion(S_J, mask_image, delta_s) < EPSILON:
-            print(f" - Convergence reached.{compute_criterion(S_J, mask_image, delta_s)}")
+        if compute_criterion(S_J, mask_image, delta_s) > EPSILON:
             break
 
         # print("\033[A\033[K\033[A\033[K\033[A\033[K\033[A\033[K\033[A\033[K\033[A\033[K\033[A\033[K", end="")
@@ -204,13 +202,18 @@ if __name__ == "__main__":
     if not os.path.isfile(image_path) or not os.path.isfile(mask_path):
         raise FileNotFoundError(f"Path {image_path} does not exist.")
 
-    # Read the images
+    # Read the image
     input_image = cv2.imread(image_path)
-    print("\n - Image size:", input_image.shape)
+    print("\n - Image size:", input_image.shape, "divided by:", scale)
     input_image = cv2.cvtColor(input_image, cv2.COLOR_BGR2RGB)
-    
+
+    # Read Mask    
     mask_image = cv2.imread(mask_path)
     mask_image = cv2.cvtColor(mask_image, cv2.COLOR_BGR2GRAY)[:,:]
+
+    # Re binearize the mask
+    non_zeros = np.where(mask_image != 0)
+    mask_image[non_zeros] = 1
 
     # Compute the pyramids
     pyramids = get_pyramids(input_image, 3)
