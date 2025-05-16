@@ -74,6 +74,19 @@ def minimize_J_global_poisson(J, R, d_positive, d_negative, d_pos_mask, d_neg_ma
     # un-pad the image
     return np.floor(J_patched_padded[radius:-radius, radius:-radius]).astype(np.uint8)
 
+def minimize_J_local_poisson(J, R, d_positive, d_negative, patch_size=7):
+    """
+    Core function that tries to minimize the following energy function:
+        E(J,D+,D-) = E+ + E- + E_delta
+    where:  E+ = sum{p in R}( min{q in D+} (D(p,q)) )
+            E- = sum{p not in R}( min{q in D+} ((D(p,q)) )
+            E_delta = ||grad_J - grad_I||
+    Apply poisson screening on the local image
+    """
+
+    #TODO
+    pass
+
 def compute_SSD(patch1, patch2):
     """Computes Sum of Square Distance (SSD) between two patches of the same shape."""
     if patch1.shape != patch2.shape:
@@ -125,6 +138,25 @@ def generate_random_offset_field(R, J, patch_size, d_positive, d_negative, d_pos
     # return the offset field with the corresponding distance
     return np.concatenate((offset_field.transpose(2,0,1), dists[None,:,:])).transpose(1,2,0)
 
+def random_offset_field_jitter(offset_field, J, R, d_pos_mask, d_neg_mask, radius=5):
+    '''
+    Create an offset field that randomly jitters the one specified, based on the range it is given
+    '''
+    w,h = offset_field.shape[:2]
+
+    # Create a jitter matrix to offset the offset field
+    jitter = np.random.randint(-radius, radius, (w,h,2))
+
+    # apply the jitter
+    new_offset_f = offset_field.copy()
+    new_offset_f[:,:,:2] += jitter
+
+    # Need to verify if destination points are in the right db
+    idxs = np.indices((w,h)).transpose(1,2,0)
+    vals = idxs + new_offset_f[:,:,:2]
+    
+
+
 def minimize_off_field_dist(off_field, J, R, patch_size, d_positive, d_negative, d_pos_mask, d_neg_mask):
     """
     minimize an offset field F st, 
@@ -143,7 +175,7 @@ def minimize_off_field_dist(off_field, J, R, patch_size, d_positive, d_negative,
     p_mode = 0
     # Iterate and alternate between search and propagate
     for i in tqdm(range(PATCH_MATCH_MAX_ITER)):          
-        if i%5 != 0:
+        if i%2 != 0:
             ### propagate mode
             off_field = propagate(off_field, R, p_mode)
 
@@ -165,7 +197,6 @@ def minimize_off_field_dist(off_field, J, R, patch_size, d_positive, d_negative,
 
             # Update the off_field correspondigly
             off_field[better_offset] = candidates[better_offset]
-
         val = (idxs.transpose(1,2,0) + off_field[:,:,:2]).transpose(2,0,1).astype(np.float32)
 
         images.append(cv2.remap(J, val[1], val[0], cv2.INTER_LINEAR))
@@ -217,8 +248,8 @@ def propagate(off_field, R, mode):
     idxs = np.indices((w, h)).transpose(1,2,0)
     locations = idxs + off_field[:,:,:2]
     outside_points = np.where(np.logical_or(
-        np.logical_or(locations[:,:,0] > 0, locations[:,:,0] < w),
-        np.logical_or(locations[:,:,1] > 0, locations[:,:,1] < h),
+        np.logical_or(locations[:,:,0] < 0, locations[:,:,0] >= w),
+        np.logical_or(locations[:,:,1] < 0, locations[:,:,1] >= h),
     ))
 
     off_field[outside_points] = old_of[outside_points]
