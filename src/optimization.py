@@ -403,7 +403,7 @@ def local_screened_poisson(image, modified_patch, patch_coords, blend_patch_size
 def get_pyramids(image, levels):
     """
     Generate Gaussian and Laplacian pyramids for the given image.
-    To reconstruct, use the reconstruct function. Warning
+    To reconstruct, use the reconstruct function.
     
     Args:
         image (numpy.ndarray): Input image.
@@ -445,7 +445,7 @@ def reconstruct(downscaled_image, laplacian_higher):
     """
     
     # Upscale the downscaled image to match the size of the Laplacian image
-    upscaled_image = cv2.pyrUp(downscaled_image)
+    upscaled_image = cv2.pyrUp(downscaled_image, dstsize=laplacian_higher.shape[:2][::-1])
 
     reconstructed_image = cv2.add(upscaled_image, laplacian_higher)
 
