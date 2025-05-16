@@ -503,8 +503,10 @@ def merge_layers(image_layers):
 
 def minimize_J_global_poisson_bfs(J, R, d_positive, d_negative, d_pos_mask, d_neg_mask, patch_size=7, lambda_factor=0.5):
     """
-    Recursive BFS PatchMatch + layered voting + Poisson blending (final version with border suppression).
-    
+    Recursive BFS PatchMatch + layered voting + screened Poisson blending.
+    Operates entirely in Lab space (no RGB conversion).
+    Applies interior border fix, full padded edge overwrite, and vote fallback.
+
     Args:
         J: Input Lab image (HxWx3)
         R: Binary region mask
@@ -516,14 +518,14 @@ def minimize_J_global_poisson_bfs(J, R, d_positive, d_negative, d_pos_mask, d_ne
         lambda_factor: Poisson blending strength
 
     Returns:
-        result: Output image (Lab, same shape as input)
-        vote_weights: Aggregated voting weights
+        result: Final Lab image (unpadded), dtype=uint8
+        vote_weights: Confidence map of voted pixels
     """
     width, height, _ = J.shape
     radius = patch_size // 2
 
     print("  - Padding image...")
-    J_paded = np.stack([np.pad(J[:,:,i], radius, mode="reflect") for i in range(3)]).transpose(1,2,0)
+    J_paded = np.stack([np.pad(J[:, :, i], radius, mode="reflect") for i in range(3)]).transpose(1, 2, 0)
 
     print("  - Generating offset field...")
     off_field = generate_random_offset_field(R, J_paded, patch_size, d_positive, d_negative, d_pos_mask, d_neg_mask)
@@ -539,27 +541,34 @@ def minimize_J_global_poisson_bfs(J, R, d_positive, d_negative, d_pos_mask, d_ne
     print("  - Merging layers...")
     J_patched_padded, vote_weights = merge_layers(image_layers)
 
-    print("  - Fixing borders before Poisson blending...")
+    print("  - Fixing interior borders in Lab space...")
     border = patch_size // 2 + 1
     lab_central = J_patched_padded[radius:-radius, radius:-radius]
     lab_original = J[radius:-radius, radius:-radius].copy()
 
     H_fix = min(lab_central.shape[0], lab_original.shape[0])
     W_fix = min(lab_central.shape[1], lab_original.shape[1])
-
-    # Interior border fix
     lab_central[:border, :W_fix] = lab_original[:border, :W_fix]
     lab_central[-border:, :W_fix] = lab_original[-border:, :W_fix]
     lab_central[:H_fix, :border] = lab_original[:H_fix, :border]
     lab_central[:H_fix, -border:] = lab_original[:H_fix, -border:]
     J_patched_padded[radius:-radius, radius:-radius] = lab_central
 
-    # Outer padded border overwrite
-    print("  - Overwriting full border region to suppress color halo...")
+    print("  - Overwriting padded border ring with original Lab...")
     J_patched_padded[:radius, :] = J_paded[:radius, :]
     J_patched_padded[-radius:, :] = J_paded[-radius:, :]
     J_patched_padded[:, :radius] = J_paded[:, :radius]
     J_patched_padded[:, -radius:] = J_paded[:, -radius:]
+
+    print("  - Replacing low-confidence votes with original Lab...")
+    if vote_weights.ndim == 2:
+        vote_mask = vote_weights > 1e-3
+    else:
+        vote_mask = vote_weights[:, :, 0] > 1e-3
+
+    vote_mask_3c = np.expand_dims(vote_mask, axis=2)  # (H, W, 1)
+    vote_mask_3c = np.tile(vote_mask_3c, (1, 1, 3))   # (H, W, 3)
+    J_patched_padded = np.where(vote_mask_3c, J_patched_padded, J_paded)
 
     print("  - Screened Poisson blending...")
     J_patched_padded = screen_poisson(J_paded, J_patched_padded, lambda_factor=lambda_factor)
@@ -567,5 +576,4 @@ def minimize_J_global_poisson_bfs(J, R, d_positive, d_negative, d_pos_mask, d_ne
     print("  - Finalizing result...")
     result = np.floor(J_patched_padded[radius:-radius, radius:-radius]).astype(np.uint8)
     return result, vote_weights
-
 
