@@ -53,8 +53,8 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7)
     ################################
 
     # Initialize tau +/-
-    tau_positive = 0.1
-    tau_negative = 0.1
+    tau_positive = 0.8
+    tau_negative = 0.005
     prev_tau_positive = tau_positive
     prev_tau_negative = tau_negative
 
@@ -96,9 +96,9 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7)
         print(f" - Done, DB+ size: {D_positive.shape[0]}, DB- size: {D_negative.shape[0]}")
         
         # Construct and display the database's images
-        # I_D_positive, I_D_negative = db.compute_image_database(J[0], D_positive, D_negative)
+        I_D_positive, I_D_negative = db.compute_image_database(J[0], D_positive, D_negative)
 
-        # utils.display_images([S_J, I_D_positive, I_D_negative])
+        utils.display_images([S_J, I_D_positive, I_D_negative])
 
         # update J to minimize the energy function
         print(" - Minimizing function...")
@@ -204,7 +204,7 @@ if __name__ == "__main__":
 
     # Read the image
     input_image = cv2.imread(image_path)
-    print("\n - Image size:", input_image.shape, "divided by:", scale)
+    print("\n - Image size:", input_image.shape)
     input_image = cv2.cvtColor(input_image, cv2.COLOR_BGR2RGB)
 
     # Read Mask    
@@ -220,9 +220,9 @@ if __name__ == "__main__":
     mask_pyramids = get_pyramids(mask_image, 3)
     
     # TEMP
-    input_image = pyramids[0][2]
+    input_image = pyramids[0][0]
     
-    mask_image = mask_pyramids[0][2]
+    mask_image = mask_pyramids[0][0]
 
     # Call the main function
     salient_image = manipulate_saliency(input_image, mask_image, delta_s)
