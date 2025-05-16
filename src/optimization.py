@@ -306,14 +306,14 @@ def screen_poisson(J, J_modified, lambda_factor):
         The blended image
     """
     n, m, _ = J.shape
-    laplacian = cv2.Laplacian(J.astype(np.float64), cv2.CV_64F)
+    laplacian = cv2.Laplacian(J.astype(np.float32), cv2.CV_32F)
     b = lambda_factor * J_modified.astype(np.float64) - laplacian
     res = np.zeros_like(b)
 
     def A(x):
 
         #lambda * f - grad^2(x)
-        lap = cv2.Laplacian(x.reshape(n,m), cv2.CV_64F)
+        lap = cv2.Laplacian(x.reshape(n,m).astype(np.float32), cv2.CV_32F)
         return lambda_factor * x - lap.flatten()
 
     for c in range(3):
@@ -417,3 +417,124 @@ def reconstruct(downscaled_image, laplacian_higher):
     reconstructed_image = cv2.add(upscaled_image, laplacian_higher)
 
     return reconstructed_image
+
+
+from collections import deque
+
+def bfs_patchmatch_recursive_layered(x0, y0, J_padded, R, patch_size, off_field, image_layers, max_depth=999):
+    visited = np.zeros(R.shape, dtype=bool)
+    queue = deque()
+    queue.append((x0, y0, 0))
+    radius = patch_size // 2
+    H, W = R.shape
+
+    def get_flat_layer_index(x, y, patch_size):
+        return (x % patch_size) + patch_size * (y % patch_size)
+
+    def vote_patch(searched_patches_map, patch, x, y):
+        r = patch.shape[0] // 2
+        region = searched_patches_map[x - r:x + r + 1, y - r:y + r + 1]
+        n = region[:, :, 3:4] + 1
+        region[:, :, :3] = (region[:, :, :3] * region[:, :, 3:4] + patch) / n
+        region[:, :, 3:4] = n
+
+    while queue:
+        x, y, depth = queue.popleft()
+
+        if depth > max_depth or visited[x, y]:
+            continue
+        visited[x, y] = True
+
+        bm_x, bm_y = (x, y) + off_field[x, y, :2].astype(np.int32)
+        best_patch = J_padded[bm_x:bm_x+patch_size, bm_y:bm_y+patch_size]
+
+        layer_id = get_flat_layer_index(x, y, patch_size)
+        vote_patch(image_layers[layer_id], best_patch, x, y)
+
+        for dx, dy in [(-patch_size, 0), (patch_size, 0), (0, -patch_size), (0, patch_size)]:
+            nx, ny = x + dx, y + dy
+            if radius <= nx < H - radius and radius <= ny < W - radius:
+                queue.append((nx, ny, depth + 1))
+
+
+def merge_layers(image_layers):
+    H, W, _ = image_layers[0].shape
+    final = np.zeros((H, W, 3), dtype=np.float32)
+    weight = np.zeros((H, W, 1), dtype=np.float32)
+
+    for layer in image_layers:
+        final += layer[:, :, :3]
+        weight += layer[:, :, 3:4]
+
+    final = final / np.maximum(weight, 1e-5)
+    return final, weight
+
+
+def minimize_J_global_poisson_bfs(J, R, d_positive, d_negative, d_pos_mask, d_neg_mask, patch_size=7, lambda_factor=0.5):
+    """
+    Recursive BFS PatchMatch + layered voting + Poisson blending (final version with border suppression).
+    
+    Args:
+        J: Input Lab image (HxWx3)
+        R: Binary region mask
+        d_positive: Coordinates in D+
+        d_negative: Coordinates in D-
+        d_pos_mask: Binary mask of D+
+        d_neg_mask: Binary mask of D-
+        patch_size: Patch size (odd)
+        lambda_factor: Poisson blending strength
+
+    Returns:
+        result: Output image (Lab, same shape as input)
+        vote_weights: Aggregated voting weights
+    """
+    width, height, _ = J.shape
+    radius = patch_size // 2
+
+    print("  - Padding image...")
+    J_paded = np.stack([np.pad(J[:,:,i], radius, mode="reflect") for i in range(3)]).transpose(1,2,0)
+
+    print("  - Generating offset field...")
+    off_field = generate_random_offset_field(R, J_paded, patch_size, d_positive, d_negative, d_pos_mask, d_neg_mask)
+
+    print("  - Search step...")
+    off_field = minimize_off_field_dist(off_field, J_paded, R, patch_size, d_positive, d_negative, d_pos_mask, d_neg_mask)
+
+    print("  - BFS PatchMatch voting...")
+    image_layers = [np.zeros((J_paded.shape[0], J_paded.shape[1], 4), dtype=np.float32) for _ in range(patch_size ** 2)]
+    center_x, center_y = height // 2, width // 2
+    bfs_patchmatch_recursive_layered(center_x, center_y, J_paded, R, patch_size, off_field, image_layers)
+
+    print("  - Merging layers...")
+    J_patched_padded, vote_weights = merge_layers(image_layers)
+
+    print("  - Fixing borders before Poisson blending...")
+    border = patch_size // 2 + 1
+    lab_central = J_patched_padded[radius:-radius, radius:-radius]
+    lab_original = J[radius:-radius, radius:-radius].copy()
+
+    H_fix = min(lab_central.shape[0], lab_original.shape[0])
+    W_fix = min(lab_central.shape[1], lab_original.shape[1])
+
+    # Interior border fix
+    lab_central[:border, :W_fix] = lab_original[:border, :W_fix]
+    lab_central[-border:, :W_fix] = lab_original[-border:, :W_fix]
+    lab_central[:H_fix, :border] = lab_original[:H_fix, :border]
+    lab_central[:H_fix, -border:] = lab_original[:H_fix, -border:]
+    J_patched_padded[radius:-radius, radius:-radius] = lab_central
+
+    # Outer padded border overwrite
+    print("  - Overwriting full border region to suppress color halo...")
+    J_patched_padded[:radius, :] = J_paded[:radius, :]
+    J_patched_padded[-radius:, :] = J_paded[-radius:, :]
+    J_patched_padded[:, :radius] = J_paded[:, :radius]
+    J_patched_padded[:, -radius:] = J_paded[:, -radius:]
+
+    print("  - Screened Poisson blending...")
+    J_patched_padded = screen_poisson(J_paded, J_patched_padded, lambda_factor=lambda_factor)
+
+    print("  - Finalizing result...")
+    result = np.floor(J_patched_padded[radius:-radius, radius:-radius]).astype(np.uint8)
+    return result, vote_weights
+
+
