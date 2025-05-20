@@ -12,10 +12,17 @@ def tempsal_saliency(image):
     # Scale the map so that max value = 1
     saliency /= saliency.max()
 
+    # import matplotlib.pyplot as plt
+    # plt.plot(saliency[75,:])
+
     # Linearize the values
-    # s_map_linear = np.log(saliency)
-    # s_map_linear /= np.min(s_map_linear)
-    # s_map_linear = 1 - s_map_linear
+    # saliency = saliency / (saliency + np.median(saliency))
+
+    # print("median of the new saliency:", np.median(saliency))
+    # import matplotlib.pyplot as plt
+    # plt.plot(saliency[75,:])
+    # plt.show()
+
 
     return saliency
 
@@ -89,7 +96,7 @@ def apply_saliancy(input_image, saliancy_map, alpha):
 
     factor = saliancy_map / saliancy_map.max()
 
-    output_image = input_image * np.pow(factor, alpha)
+    output_image = input_image * np.power(factor, alpha)
 
     # output_image = input_image + saliancy_map * alpha
     output_image = np.clip(output_image, 0, 255).astype(np.uint8)
