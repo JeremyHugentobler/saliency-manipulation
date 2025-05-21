@@ -23,7 +23,7 @@ def compute_image_database(J, D_positve, D_negative, patch_size=7):
     D_plus = J * D_positive_mask
     D_minus = J * D_negative_mask
     
-    return cv2.cvtColor(D_plus, cv2.COLOR_Lab2RGB), cv2.cvtColor(D_minus, cv2.COLOR_Lab2RGB)
+    return D_plus, D_minus
 
     
 def compute_location_database(tau_plus, tau_minus, J, S_J):
