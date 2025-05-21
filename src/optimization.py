@@ -6,18 +6,17 @@ from scipy.sparse import diags
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from PIL import Image
-from numba import jit
 
-from utils import display_images
+from src.utils import display_images
 
 # import matplotlib.pyplot as plt
 
 STRIDE = 1
 MAX_ITERATION = 10
-PATCH_MATCH_MAX_ITER = 2*50 # each "iterartion" is (rdm search + propagate)
+PATCH_MATCH_MAX_ITER = 2*6 # each "iterartion" is (rdm search + propagate)
 EPSILON = 1e5
 
-def minimize_J_global_poisson(J, R, d_positive, d_negative, d_pos_mask, d_neg_mask, patch_size=7, lambda_factor=0.1):
+def minimize_J_global_poisson(J, R, d_positive, d_negative, d_pos_mask, d_neg_mask, patch_size, lambda_factor=0.5):
     """
     Core function that tries to minimize the following energy function:
         E(J,D+,D-) = E+ + E- + E_delta
@@ -32,17 +31,20 @@ def minimize_J_global_poisson(J, R, d_positive, d_negative, d_pos_mask, d_neg_ma
     ### SEARCH-AND-VOTE
     print("  - Applying PatchMatch...")
 
-    # Pad the image so that all pixel of J is a possible patch center. (dont look, just know it works)
-    J_paded = np.stack([np.pad(J[:,:,i], radius, mode="reflect") for i in range(3)]).transpose(1,2,0)
-    
-    # Create the mapping from a pixel location to (the current mean of the overlapping patches, number of elements. 
+    # Pad the image so that all pixel location of J is a valid patch center.
+    if radius > 0:
+        J_paded = np.stack([np.pad(J[:,:,i], radius, mode="reflect") for i in range(3)]).transpose(1,2,0)
+    else:
+        J_paded = J
+
+    # Create the mapping from a pixel location to the current mean of the overlapping patches, number of elements. 
     searched_patches_map = np.zeros((J_paded.shape[0], J_paded.shape[1], 4)) # 4 = (curr_r_mean, curr_g_mean, curr_b_mean, # seen pixels)
 
     off_field = generate_random_offset_field(R, J_paded, patch_size, d_positive, d_negative, d_pos_mask, d_neg_mask)
     print("    - Offset field initialized")
     ### SEARCH STEP
     print("    - Search step")
-    off_field = minimize_off_field_dist(off_field, J_paded, R, patch_size, d_pos_mask, d_neg_mask)
+    off_field = minimize_off_field_dist(off_field, J_paded, R, patch_size, d_positive, d_negative, d_pos_mask, d_neg_mask)
 
     ### VOTING STEP
     print("    - Vote step")
@@ -50,8 +52,12 @@ def minimize_J_global_poisson(J, R, d_positive, d_negative, d_pos_mask, d_neg_ma
     for x in tqdm(range(0, width, STRIDE)):
         for y in range(0, height, STRIDE):
             bm_x, bm_y = (x,y) + off_field[x,y,:2].astype(np.int32)
-            best_match = J_paded[bm_x:bm_x+patch_size, bm_y:bm_y+patch_size]
-            
+            best_match = get_patch(J_paded, bm_x, bm_y, patch_size)
+
+            # special case for patch_size = 1
+            if radius == 0:
+                searched_patches_map[x,y,:-1] = best_match
+                continue
 
             # Set of pixel that need to be updated by the mean value of the patchmatch res
             s = searched_patches_map[x:x+patch_size, y:y+patch_size]
@@ -73,28 +79,46 @@ def minimize_J_global_poisson(J, R, d_positive, d_negative, d_pos_mask, d_neg_ma
     J_patched_padded = screen_poisson(J_paded, J_patched_padded, lambda_factor=lambda_factor)
 
     # print("\033[A\033[K\033[A\033[K", end="")
-    # un-pad the image
-    return np.floor(J_patched_padded[radius:-radius, radius:-radius]).astype(np.uint8)
 
-def compute_SSD(patch1, patch2) -> float:
+    if radius > 0:
+        # un-pad the image
+        return np.floor(J_patched_padded[radius:-radius, radius:-radius]).astype(np.uint8)
+    else:
+        print("pathc_size of 1")
+        return np.floor(J_patched_padded).astype(np.uint8)
+
+def get_patch(J,x,y,patch_size):
+    """ retrieve the patch with top left corner's coordinate = (x,y), check if valid too"""
+    if patch_size > 1:
+        patch = J[x:x+patch_size, y:y+patch_size]
+
+        # sanity check
+        w,h = patch.shape[:2]
+        assert w == patch_size and h == patch_size
+    else:
+        patch = J[x,y]
+
+    return patch
+
+
+def compute_SSD(patch1, patch2):
     """Computes Sum of Square Distance (SSD) between two patches of the same shape."""
     if patch1.shape != patch2.shape:
         return np.inf  # Incompatible patches — skip them
     return np.sum((patch1 - patch2).astype(np.float64) ** 2)
 
-@jit
 def compute_dist(J, off_field, patch_size):
     w, h = off_field.shape[:2]
 
     dists = np.zeros((w,h))
     for i in range(w):
         for j in range(h):
-            patch = J[i:i+patch_size, j:j+patch_size]
+            patch = get_patch(J, i, j, patch_size)
             off_x, off_y = off_field[i,j,:2]
             x = int(off_x + i)
             y = int(off_y + j)
 
-            off_patch = J[x:x+patch_size, y:y+patch_size]
+            off_patch = get_patch(J, x, y, patch_size)
             dists[i,j] = compute_SSD(patch, off_patch)
 
     return dists
@@ -131,6 +155,8 @@ def generate_random_offset_field(R, J, patch_size, d_positive, d_negative, d_pos
     # Merge the 2 images according to R and db's
     offset_field[mask_DB_pos_inter] = f_in[mask_DB_pos_inter]
     offset_field[mask_DB_neg_inter] = f_out[mask_DB_neg_inter]
+    # offset_field[R] = f_in[R]
+    # offset_field[np.logical_not(R)] = f_out[np.logical_not(R)]
 
     # Compute the patch_distance
     dists = compute_dist(J, offset_field, patch_size)
@@ -138,7 +164,7 @@ def generate_random_offset_field(R, J, patch_size, d_positive, d_negative, d_pos
     # return the offset field with the corresponding distance
     return np.concatenate((offset_field.transpose(2,0,1), dists[None,:,:])).transpose(1,2,0)
 
-def random_offset_field_jitter(offset_field, J, R, d_pos_mask, d_neg_mask, patch_size, radius=5):
+def random_offset_field_jitter(offset_field, radius=5):
     '''
     Create an offset field that randomly jitters the one specified, based on the range it is given
     '''
@@ -162,27 +188,10 @@ def random_offset_field_jitter(offset_field, J, R, d_pos_mask, d_neg_mask, patch
 
     new_offset_f[outside_points] = offset_field[outside_points]
 
-
-    # compute the new distances
-    for i in range(w):
-        for j in range(h):
-            off_x, off_y, old_dist = new_offset_f[i,j]
-            off_x = int(off_x + i)
-            off_y = int(off_y + j)
-
-            # check if new location is in right database
-            db = d_pos_mask if R[i,j] > 0 else d_neg_mask
-            if db[off_x, off_y] == 0:
-                new_offset_f[i,j,2] = np.inf      # Set dist to max value to discard at next step
-            else:
-                patch = J[i:i+patch_size, j:j+patch_size]
-                off_patch = J[off_x:off_x+patch_size, off_y:off_y+patch_size]
-                new_offset_f[i,j,2] = compute_SSD(patch, off_patch)
-
     return new_offset_f    
 
 
-def minimize_off_field_dist(off_field, J, R, patch_size, d_pos_mask, d_neg_mask):
+def minimize_off_field_dist(off_field, J, R, patch_size, d_positive, d_negative, d_pos_mask, d_neg_mask):
     """
     minimize an offset field F st, 
         fa F(x,y) = (x_off, y_off, d): d = SSD(patch(x,y), patch(x+x_off, y+y_off)) is minimized
@@ -190,6 +199,7 @@ def minimize_off_field_dist(off_field, J, R, patch_size, d_pos_mask, d_neg_mask)
     """
     width, height = R.shape
 
+    # Storing each iteration's reconstruction
     images = []
 
     idxs = np.indices((width, height))
@@ -198,44 +208,54 @@ def minimize_off_field_dist(off_field, J, R, patch_size, d_pos_mask, d_neg_mask)
     images.append(cv2.remap(J, val[1], val[0], cv2.INTER_LINEAR))
 
     p_mode = 0
-    r = min(width, height)
+    r_max = min(width, height) // 4
+    r = r_max
     # Iterate and alternate between search and propagate
     for i in tqdm(range(PATCH_MATCH_MAX_ITER)):          
         if i%2 == 0:
             ### propagate mode
             candidates = propagate(off_field, R, p_mode)
-            candidates[:,:,2] = compute_dist(J, candidates, patch_size)
 
             p_mode = 1-p_mode
-
-            # Sanity check
-            val = idxs.transpose(1,2,0) + off_field[:,:,:2]
-            if np.any(np.logical_or(val[:,:,0] >= width, val[:,:,1] >= height)):
-                faulty = np.where((np.logical_or(val[:,:,0] >= width, val[:,:,1] >= height)))
-                print(off_field[faulty])
-                raise Exception("What the fuck ?")
                 
         else:
+            ### Random search mode
             # compare with randomly generated offset field
             # candidates = generate_random_offset_field(R, J, patch_size, d_positive, d_negative, d_pos_mask, d_neg_mask)
-            candidates = random_offset_field_jitter(off_field, J, R, d_pos_mask, d_neg_mask, patch_size, radius=r)
+            candidates = random_offset_field_jitter(off_field, radius=r)
 
             r = r//2        # halves the search radius for next iteration
             if r <= 1:
-                r = min(width, height)
+                r = r_max                
+
+        # compute the new distances
+        for i in range(width):
+            for j in range(height):
+                off_x, off_y, _ = candidates[i,j]
+                off_x = int(off_x + i)
+                off_y = int(off_y + j)
+
+                # check if new location is in right database
+                db = d_pos_mask if R[i,j] > 0 else d_neg_mask
+                if db[off_x, off_y] == 0:
+                    candidates[i,j,2] = float("inf")      # Set dist to max value to discard at next step
+                else:
+                    # patch = get_patch(J, i, j, patch_size)
+                    # off_patch = get_patch(J, off_x, off_y, patch_size)
+                    patch = J[i:i+patch_size,j:j+patch_size]
+                    off_patch = J[off_x:off_x+patch_size,off_y:off_y+patch_size]
+                    candidates[i,j,2] = compute_SSD(patch, off_patch)
 
         # Gather all the points where the candidates are better
         better_offset = np.where(candidates[:,:,2] < off_field[:,:,2])
 
         # Update the off_field correspondigly
         off_field[better_offset] = candidates[better_offset]
-        val = (idxs.transpose(1,2,0) + off_field[:,:,:2]).transpose(2,0,1).astype(np.float32)
 
-        images.append(cv2.remap(J, val[1], val[0], cv2.INTER_LINEAR))
-        
-    # n_of_image = 9
-    # display_images(images[-n_of_image:], [i for i in range(n_of_image)])
+        val = (idxs.transpose(1,2,0) + off_field[:,:,:2]).transpose(2,0,1).astype(np.float32)
+        images.append(cv2.remap(J, val[1], val[0], cv2.INTER_NEAREST))        
     
+    # images = [Image.fromarray(img.astype(np.uint8)) for img in images]
     images = [Image.fromarray(cv2.cvtColor(img, cv2.COLOR_Lab2RGB).astype(np.uint8)) for img in images]
 
     images[0].save(
@@ -253,6 +273,7 @@ def propagate(off_field, R, mode):
     propaget an offset field in x and y direction, causal or anti causal given the mode selected.
     """
     old_of = off_field.copy()
+    
     if mode == 0:
         # Offset on x
         # gather mask of where the offsetted elements are better then the not ones (has to also be in the same region)
@@ -279,11 +300,12 @@ def propagate(off_field, R, mode):
     # find the offset that goes outside the image
     idxs = np.indices((w, h)).transpose(1,2,0)
     locations = idxs + off_field[:,:,:2]
-    outside_points = np.where(np.logical_or(
+    outside_points = np.logical_or(
         np.logical_or(locations[:,:,0] < 0, locations[:,:,0] >= w),
         np.logical_or(locations[:,:,1] < 0, locations[:,:,1] >= h),
-    ))
+    )
 
+    # and put them back to their old previous value
     off_field[outside_points] = old_of[outside_points]
 
     return off_field

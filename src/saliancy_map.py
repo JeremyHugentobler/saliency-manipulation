@@ -7,6 +7,9 @@ import sys
 import torch
 from src.tempsal_wrapper import compute_saliency_map
 
+
+CV_SALIENCY = cv2.saliency.StaticSaliencySpectralResidual_create()
+
 def tempsal_saliency(image):
     saliency = compute_saliency_map(image).mean(axis=2)
     # Scale the map so that max value = 1
@@ -66,17 +69,16 @@ def course_saliancy(input_image):
     return C_norm
 
 
-def custom_saliancy(input_image):
+def opencv_saliency(input_image):
     """
-    Computes the saliency map for a given course.
-
-    This function is a placeholder and currently does not implement any functionality.
-    Future implementations should include the logic to compute the saliency map.
-
+    Computes the saliency map for a given image using the static opcv methode
     Returns:
         None
     """
-    pass
+    _, saliency = CV_SALIENCY.computeSaliency(input_image)
+    saliency /= saliency.max()
+    assert not np.any(saliency < 0)
+    return saliency
 
 def apply_saliancy(input_image, saliancy_map, alpha):
     """

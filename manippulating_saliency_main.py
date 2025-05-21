@@ -24,14 +24,14 @@ EPSILON = 1e-3
 ############################
 #    Modular Definitions   # 
 ############################
-compute_saliency_map = sm.tempsal_saliency
+compute_saliency_map = sm.opencv_saliency
 minimize_J = opt.minimize_J_global_poisson
 compute_database = db.compute_location_database
 
 
 
 # Main function
-def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7, learning_rate=0.1):
+def manipulate_saliency(input_image, R, delta_s, max_iteration=1, patch_size=3, learning_rate=0.1, convert=True):
     """
     This is the main function that will implement the saliency manipulation algorithm
     as described in the paper. The input image will see its region of interest R defined by
@@ -53,15 +53,15 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7,
     ################################
 
     # Initialize tau +/-
-    tau_positive = 0.5
-    tau_negative = 0.5
+    tau_positive = 0.8
+    tau_negative = 0.3
 
     print("\ninitalizing variables")
 
     # Initialize the interational images buffers (Try to keep them as [0,255] images)
     J = np.array([np.zeros_like(input_image) for _ in range(2)])
-    J[0] = cv2.cvtColor(input_image, cv2.COLOR_RGB2Lab)
-
+    J[0] = input_image
+    
     # Initialize the saliency maps S_J
     print(" - computing saliency map...")
     S_J = compute_saliency_map(J[0])
@@ -99,8 +99,18 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7,
 
         # update J to minimize the energy function
         print(" - Minimizing function...")
+        
+        # Convert image into Lab color space
+        if convert:
+            J[0] = cv2.cvtColor(J[0], cv2.COLOR_RGB2Lab)
+
         J[1] = minimize_J(J[0], mask_image, D_positive, D_negative, D_pos_mask, D_neg_mask, patch_size)
         print(" - Done.")
+
+        # Convert back into RGB
+        if convert:
+            J[0] = cv2.cvtColor(J[0], cv2.COLOR_Lab2RGB)
+            J[1] = cv2.cvtColor(J[1], cv2.COLOR_Lab2RGB)
 
         # Compute new saliency map
         print(" - computing new saliency map...")
@@ -134,7 +144,7 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7,
         # print("\033[A\033[K\033[A\033[K\033[A\033[K\033[A\033[K\033[A\033[K\033[A\033[K\033[A\033[K", end="")
 
     print("Done")
-    return cv2.cvtColor(J[0], cv2.COLOR_Lab2RGB)
+    return J[0]
 
 def phi(S_J, R):
     """
@@ -198,11 +208,17 @@ def update_taus(tau_positive, tau_negative, criterion, learning_rate):
 # Entry point
 if __name__ == "__main__":
 
-    assert len(sys.argv) == 4, "Usage: python manipulating_saliency_main.py <image_path> <mask_path> <delta_s>"
-    image_path = sys.argv[1]
-    mask_path = sys.argv[2]
-    delta_s = float(sys.argv[3])
-
+    if len(sys.argv) == 4:
+        image_path = sys.argv[1]
+        mask_path = sys.argv[2]
+        delta_s = float(sys.argv[3])
+    elif len(sys.argv) == 3:
+        image_nb = sys.argv[1]
+        image_path = f'./data/object_enhancement/{image_nb}_in.jpg'
+        mask_path = f'./data/object_enhancement/masks/{image_nb}_mask.jpg'
+        delta_s = float(sys.argv[2])
+    else:
+        raise Exception("Usage: python manipulating_saliency_main.py <image_path> <mask_path> <delta_s>")
     
     # Check that the path corresponds to existing files
     if not os.path.isfile(image_path) or not os.path.isfile(mask_path):
@@ -215,16 +231,10 @@ if __name__ == "__main__":
 
     # Read Mask    
     mask_image = cv2.imread(mask_path)
-    mask_image = cv2.cvtColor(mask_image, cv2.COLOR_BGR2GRAY)[:,:]
+    mask_image = cv2.cvtColor(mask_image, cv2.COLOR_BGR2GRAY)
     
     mask_image = cv2.resize(mask_image, (input_image.shape[1], input_image.shape[0]), interpolation=cv2.INTER_NEAREST)
     assert input_image.shape[:2] == mask_image.shape[:2], "Image and mask must match in size"
-
-    _, mask_image = cv2.threshold(mask_image, 127, 255, cv2.THRESH_BINARY)
-
-    # # Re binearize the mask
-    # non_zeros = np.where(mask_image != 0)
-    # mask_image[non_zeros] = 1
 
     # Compute the pyramids
     pyramids = get_pyramids(input_image, 3)
@@ -235,6 +245,9 @@ if __name__ == "__main__":
     
     mask_image = mask_pyramids[0][1]
 
+    _, mask_image = cv2.threshold(mask_image, 127, 255, cv2.THRESH_BINARY)
+    mask_image[mask_image > 0] = 1
+    
     # Call the main function
     salient_image = manipulate_saliency(input_image, mask_image, delta_s)
     
