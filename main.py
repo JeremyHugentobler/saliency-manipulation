@@ -52,8 +52,8 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=3,
     ################################
 
     # Initialize tau +/-
-    tau_positive = 0.5
-    tau_negative = 0.5
+    tau_positive = 0
+    tau_negative = 1
 
     print("\ninitalizing variables")
 
@@ -270,7 +270,7 @@ if __name__ == "__main__":
     mask_pyramids, mask_laplacian = get_pyramids(mask_image, 2)
     
     # First, we run the full algorithm on the smallest image of the pyramid
-    input_image = pyramids[-1]
+    img = pyramids[-1]
     mask_image = mask_pyramids[-1]
 
     # Rebinearize the mask
@@ -280,7 +280,7 @@ if __name__ == "__main__":
     # Starting with the coarsest image
     utils.header_print("\nRunning the algorithm on the coarsest image...")
     
-    coarse_image, tau_positive, tau_negative = manipulate_saliency(input_image, mask_image, delta_s, max_iteration=1)
+    coarse_image, tau_positive, tau_negative = manipulate_saliency(img, mask_image, delta_s, max_iteration=10)
     utils.display_image(coarse_image, pyramids[-1])
     pyramids[-1] = coarse_image
     
