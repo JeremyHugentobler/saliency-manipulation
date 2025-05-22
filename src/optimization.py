@@ -57,6 +57,7 @@ def minimize_J_global_poisson(J, R, d_positive, d_negative, d_pos_mask, d_neg_ma
     offseted_patches = J_patches[l_x, l_y]
 
     # Compute the mean of each patch
+    # J_patched = J[l_x, l_y]
     per_pixel_patch_mean = offseted_patches.mean(axis=(2,3))
 
     # repad the mean image
@@ -90,12 +91,6 @@ def get_patch(J,x,y,patch_size):
         patch = J[x,y]
     return patch
 
-def compute_SSD(patch1, patch2):
-    """Computes Sum of Square Distance (SSD) between two patches of the same shape."""
-    if patch1.shape != patch2.shape:
-        return np.inf  # Incompatible patches — skip them
-    return np.sum((patch1 - patch2).astype(np.float64) ** 2)
-
 def compute_dist(J, off_field, patch_size):
     w, h = off_field.shape[:2]
 
@@ -120,7 +115,8 @@ def compute_dist(J, off_field, patch_size):
     # Retrieve patches from location
     offseted_patches = J_patches[l_x, l_y]
 
-    dists = np.sum((J_patches - offseted_patches).astype(np.float64) ** 2, axis=(2,3,4))
+    # Compute SSD
+    dists = np.sum((J_patches.astype(np.float64) - offseted_patches.astype(np.float64)) ** 2, axis=(2,3,4))
 
     # Correct the outsiders to be invalidated later
     if len(outsiders) > 0:
@@ -147,10 +143,8 @@ def generate_random_offset_field(R, J, patch_size, d_positive, d_negative, d_pos
     random_db_idx = np.random.randint(0, len(d_positive), (w,h))
     f_in = d_positive[random_db_idx]
     
-
     random_db_idx = np.random.randint(0, len(d_negative), (w,h))
     f_out = d_negative[random_db_idx]
-
 
     # From selected point to offset
     idxs = np.indices((w,h)).transpose(1,2,0)
@@ -184,7 +178,9 @@ def random_offset_field_jitter(offset_field, radius=5):
 
     return new_offset_f    
 
-def validated_candidates(off_field, candidates, J, patch_size, d_pos_mask, d_neg_mask):
+def validated_candidates(off_field, candidates, J, patch_size, R, d_pos_mask, d_neg_mask):
+
+    old_off_f = off_field.copy()
 
     # Recompute new SSD from candidates
     dists = compute_dist(J, candidates, patch_size)
@@ -192,12 +188,21 @@ def validated_candidates(off_field, candidates, J, patch_size, d_pos_mask, d_neg
     
     # Gather all the points where the candidates are better
     better_offset = candidates[:,:,2] < off_field[:,:,2]
-    
-    # check if new location is in right database
-    #TODO
 
     # Update the off_field correspondigly
     off_field[better_offset] = candidates[better_offset]
+    
+    # check if new location is in right database
+    w,h = off_field.shape[:2]
+    idxs = np.indices((w,h))
+    l_x, l_y = idxs + off_field[:,:,:2].transpose(2,0,1).astype(np.int32)
+
+    wrong_db = np.logical_or(
+        np.logical_and(R, np.logical_not(d_pos_mask[l_x, l_y])),                        # in mask, outside db+
+        np.logical_and(np.logical_not(R), np.logical_not(d_neg_mask[l_x, l_y]))         # not in mask, outside db-
+    )
+
+    off_field[wrong_db] = old_off_f[wrong_db]
 
     return off_field
 
@@ -225,7 +230,7 @@ def minimize_off_field_dist(off_field, J, R, patch_size, d_pos_mask, d_neg_mask)
             ### propagate mode
             candidates = propagate(off_field, R, p_mode)
                 
-            off_field = validated_candidates(off_field, candidates, J, patch_size, d_pos_mask, d_neg_mask)
+            off_field = validated_candidates(off_field, candidates, J, patch_size, R, d_pos_mask, d_neg_mask)
 
             p_mode = 1-p_mode
                 
@@ -236,7 +241,7 @@ def minimize_off_field_dist(off_field, J, R, patch_size, d_pos_mask, d_neg_mask)
                 # compare with randomly generated offset field
                 candidates = random_offset_field_jitter(off_field, radius=r)
 
-                off_field = validated_candidates(off_field, candidates, J, patch_size, d_pos_mask, d_neg_mask)
+                off_field = validated_candidates(off_field, candidates, J, patch_size, R, d_pos_mask, d_neg_mask)
                 
                 r = r//2        # halves the search radius for next iteration
 
