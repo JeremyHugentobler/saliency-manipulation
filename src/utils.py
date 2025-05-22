@@ -3,6 +3,16 @@ import matplotlib.pyplot as plt
 import cv2, skimage, os, sys
 
 
+def header_print(title):
+    """Function to print a title with # around it
+    Args:
+        title (str): What you want to be printed
+    """
+    
+    print('#'*(len(title) + 8))
+    print('#'*4, title, '#' * 4)
+    print('#'*(len(title) + 8))
+
 def display_image(result_image, input_image):
     """
     Displays the result image next to the default image
