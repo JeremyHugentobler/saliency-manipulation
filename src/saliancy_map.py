@@ -5,7 +5,7 @@ import numpy as np
 from pathlib import Path
 import sys
 import torch
-from src.tempsal_wrapper import compute_saliency_map
+# from src.tempsal_wrapper import compute_saliency_map
 
 
 CV_SALIENCY = cv2.saliency.StaticSaliencySpectralResidual_create()
