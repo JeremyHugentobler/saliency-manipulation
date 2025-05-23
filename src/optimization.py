@@ -574,3 +574,63 @@ def minimize_J_global_poisson_bfs(J, R, d_positive, d_negative, d_pos_mask, d_ne
     result = np.floor(J_patched_padded[radius:-radius, radius:-radius]).astype(np.uint8)
     return result, vote_weights
 
+def screen_poisson_brightness(J, J_modified, lambda_factor):
+    """
+    Poisson blending only on grayscale brightness (mean RGB channel), preserving color.
+    """
+    J = J.astype(np.float32)
+    J_modified = J_modified.astype(np.float32)
+    n, m, _ = J.shape
+
+    J_gray = np.mean(J, axis=2)
+    J_mod_gray = np.mean(J_modified, axis=2)
+
+    lap = cv2.Laplacian(J_gray, cv2.CV_32F)
+    b = lambda_factor * J_mod_gray - lap
+
+    def A(x):
+        x_reshaped = x.reshape((n, m)).astype(np.float32)
+        lap = cv2.Laplacian(x_reshaped, cv2.CV_32F)
+        return lambda_factor * x - lap.flatten()
+
+    x_blended, _ = cg(LinearOperator((n*m, n*m), matvec=A), b.flatten(), x0=J_gray.flatten())
+    blended_gray = x_blended.reshape((n, m))
+
+    # Merge new gray channel into original RGB by matching mean
+    blended = J.copy()
+    gray_ratio = (blended_gray + 1e-5) / (np.mean(J, axis=2) + 1e-5)
+    for c in range(3):
+        blended[:, :, c] *= gray_ratio
+
+    return np.clip(blended, 0, 255).astype(np.uint8)
+
+def screen_poisson_luminance(J, J_modified, lambda_factor):
+    """
+    Poisson blending only on perceptual luminance (Y from YUV), preserving color.
+    """
+    J = J.astype(np.float32)
+    J_modified = J_modified.astype(np.float32)
+    n, m, _ = J.shape
+
+    # Y = 0.299R + 0.587G + 0.114B
+    J_lum = 0.299 * J[:, :, 0] + 0.587 * J[:, :, 1] + 0.114 * J[:, :, 2]
+    J_mod_lum = 0.299 * J_modified[:, :, 0] + 0.587 * J_modified[:, :, 1] + 0.114 * J_modified[:, :, 2]
+
+    lap = cv2.Laplacian(J_lum, cv2.CV_32F)
+    b = lambda_factor * J_mod_lum - lap
+
+    def A(x):
+        x_reshaped = x.reshape((n, m)).astype(np.float32)
+        lap = cv2.Laplacian(x_reshaped, cv2.CV_32F)
+        return lambda_factor * x - lap.flatten()
+
+    x_blended, _ = cg(LinearOperator((n*m, n*m), matvec=A), b.flatten(), x0=J_lum.flatten())
+    blended_lum = x_blended.reshape((n, m))
+
+    # Adjust RGB by scaling each channel to match new luminance
+    lum_ratio = (blended_lum + 1e-5) / (J_lum + 1e-5)
+    blended = J.copy()
+    for c in range(3):
+        blended[:, :, c] *= lum_ratio
+
+    return np.clip(blended, 0, 255).astype(np.uint8)
