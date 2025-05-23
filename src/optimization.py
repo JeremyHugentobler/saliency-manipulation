@@ -574,66 +574,88 @@ def minimize_J_global_poisson_bfs(J, R, d_positive, d_negative, d_pos_mask, d_ne
     result = np.floor(J_patched_padded[radius:-radius, radius:-radius]).astype(np.uint8)
     return result, vote_weights
 
-def screen_poisson_brightness(J, J_modified, lambda_factor):
-    """
-    Poisson blending only on grayscale brightness (mean RGB channel), preserving color.
-    """
-    J = J.astype(np.float32)
-    J_modified = J_modified.astype(np.float32)
-    n, m, _ = J.shape
+import numpy as np
+import cv2
+from scipy.sparse.linalg import cg, LinearOperator
 
-    J_gray = np.mean(J, axis=2)
-    J_mod_gray = np.mean(J_modified, axis=2)
+def screen_poisson_lab_luminance(J_lab, J_lab_modified, lambda_factor):
+    """
+    Screened Poisson blending applied only to the L (luminance) channel of Lab images.
+    
+    Args:
+        J_lab (np.ndarray): Original image in Lab color space (H, W, 3), dtype=float32 or uint8.
+        J_lab_modified (np.ndarray): Patchmatched image in Lab space, same shape as J_lab.
+        lambda_factor (float): Weight between data term and Laplacian term.
+    
+    Returns:
+        np.ndarray: Lab image (H, W, 3) with blended L channel.
+    """
 
-    lap = cv2.Laplacian(J_gray, cv2.CV_32F)
-    b = lambda_factor * J_mod_gray - lap
+    # Convert to float32 for accuracy if not already
+    J_lab = J_lab.astype(np.float32)
+    J_lab_modified = J_lab_modified.astype(np.float32)
+    
+    n, m, _ = J_lab.shape
+    L_orig = J_lab[:, :, 0]
+    L_mod = J_lab_modified[:, :, 0]
+
+    # Compute Laplacian of the original L channel
+    lap = cv2.Laplacian(L_orig, cv2.CV_32F)
+    b = lambda_factor * L_mod - lap
+
+    # Define linear operator A(x) = λ * x - ∆x
+    def A(x):
+        x_reshaped = x.reshape((n, m)).astype(np.float32)
+        lap = cv2.Laplacian(x_reshaped, cv2.CV_32F)
+        return (lambda_factor * x - lap.flatten())
+
+    # Solve using conjugate gradient
+    x_blended, _ = cg(LinearOperator((n*m, n*m), matvec=A), b.flatten(), x0=L_orig.flatten().astype(np.float32), maxiter=200)
+
+    # Replace L channel with blended result
+    blended_lab = J_lab.copy()
+    blended_lab[:, :, 0] = x_blended.reshape((n, m))
+
+    # Clip and convert
+    blended_lab = np.clip(blended_lab, 0, 255).astype(np.uint8)
+
+    return blended_lab
+
+def screen_poisson_luminance_lab(J_lab, J_lab_modified, lambda_factor):
+    """
+    Screened Poisson blending on perceptual luminance (L channel from Lab).
+    
+    Args:
+        J_lab: np.ndarray, shape (H, W, 3), Lab image before modification.
+        J_lab_modified: np.ndarray, shape (H, W, 3), Lab image after patching.
+        lambda_factor: float, weighting factor for screened Poisson.
+
+    Returns:
+        np.ndarray: Lab image with blended luminance channel.
+    """
+    J_lab = J_lab.astype(np.float32)
+    J_lab_modified = J_lab_modified.astype(np.float32)
+
+    n, m = J_lab.shape[:2]
+    L_orig = J_lab[:, :, 0]
+    L_mod = J_lab_modified[:, :, 0]
+
+    lap = cv2.Laplacian(L_orig, cv2.CV_32F)
+    b = lambda_factor * L_mod - lap
 
     def A(x):
         x_reshaped = x.reshape((n, m)).astype(np.float32)
         lap = cv2.Laplacian(x_reshaped, cv2.CV_32F)
         return lambda_factor * x - lap.flatten()
 
-    x_blended, _ = cg(LinearOperator((n*m, n*m), matvec=A), b.flatten(), x0=J_gray.flatten())
-    blended_gray = x_blended.reshape((n, m))
+    x_blended, _ = cg(LinearOperator((n*m, n*m), matvec=A), b.flatten(), x0=L_orig.flatten(), maxiter=200)
+    L_blended = x_blended.reshape((n, m))
 
-    # Merge new gray channel into original RGB by matching mean
-    blended = J.copy()
-    gray_ratio = (blended_gray + 1e-5) / (np.mean(J, axis=2) + 1e-5)
-    for c in range(3):
-        blended[:, :, c] *= gray_ratio
+    blended = J_lab.copy()
+    blended[:, :, 0] = L_blended
 
     return np.clip(blended, 0, 255).astype(np.uint8)
 
-def screen_poisson_luminance(J, J_modified, lambda_factor):
-    """
-    Poisson blending only on perceptual luminance (Y from YUV), preserving color.
-    """
-    J = J.astype(np.float32)
-    J_modified = J_modified.astype(np.float32)
-    n, m, _ = J.shape
-
-    # Y = 0.299R + 0.587G + 0.114B
-    J_lum = 0.299 * J[:, :, 0] + 0.587 * J[:, :, 1] + 0.114 * J[:, :, 2]
-    J_mod_lum = 0.299 * J_modified[:, :, 0] + 0.587 * J_modified[:, :, 1] + 0.114 * J_modified[:, :, 2]
-
-    lap = cv2.Laplacian(J_lum, cv2.CV_32F)
-    b = lambda_factor * J_mod_lum - lap
-
-    def A(x):
-        x_reshaped = x.reshape((n, m)).astype(np.float32)
-        lap = cv2.Laplacian(x_reshaped, cv2.CV_32F)
-        return lambda_factor * x - lap.flatten()
-
-    x_blended, _ = cg(LinearOperator((n*m, n*m), matvec=A), b.flatten(), x0=J_lum.flatten())
-    blended_lum = x_blended.reshape((n, m))
-
-    # Adjust RGB by scaling each channel to match new luminance
-    lum_ratio = (blended_lum + 1e-5) / (J_lum + 1e-5)
-    blended = J.copy()
-    for c in range(3):
-        blended[:, :, c] *= lum_ratio
-
-    return np.clip(blended, 0, 255).astype(np.uint8)
 
 def adaptive_tau_initialization(s_map, mask, boost_factor=0.2):
     """
