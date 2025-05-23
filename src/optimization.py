@@ -634,3 +634,41 @@ def screen_poisson_luminance(J, J_modified, lambda_factor):
         blended[:, :, c] *= lum_ratio
 
     return np.clip(blended, 0, 255).astype(np.uint8)
+
+def adaptive_tau_initialization(s_map, mask, boost_factor=0.2):
+    """
+    Initializes tau_positive and tau_negative to favor small salient regions.
+    
+    Args:
+        s_map: (H, W) saliency map, float32 or float64
+        mask: (H, W) binary mask, uint8 or bool
+        boost_factor: amount to amplify the contrast when foreground is small (e.g., 0.2)
+
+    Returns:
+        tau_positive, tau_negative
+    """
+    # Normalize saliency map if needed
+    s_map = (s_map - s_map.min()) / (s_map.max() - s_map.min() + 1e-8)
+
+    saliency_fg = s_map[mask > 0]
+    saliency_bg = s_map[mask == 0]
+
+    mean_fg = np.mean(saliency_fg)
+    mean_bg = np.mean(saliency_bg)
+
+    # Mask coverage ratio
+    mask_ratio = np.sum(mask > 0) / mask.size
+
+    # Contrast-driven adjustment
+    contrast = mean_fg - mean_bg
+    bias = (1 - mask_ratio) * boost_factor * np.sign(contrast)
+
+    # Base taus at 70th/30th percentiles
+    base_tau_pos = np.quantile(saliency_fg, 0.7)
+    base_tau_neg = np.quantile(saliency_bg, 0.3)
+
+    # Apply bias
+    tau_positive = np.clip(base_tau_pos + bias, 0, 1)
+    tau_negative = np.clip(base_tau_neg - bias, 0, 1)
+
+    return tau_positive, tau_negative
