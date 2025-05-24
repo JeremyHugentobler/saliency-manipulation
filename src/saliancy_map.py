@@ -8,7 +8,8 @@ import torch
 # from src.tempsal_wrapper import compute_saliency_map
 
 
-CV_SALIENCY = cv2.saliency.StaticSaliencySpectralResidual_create()
+CV_SALIENCY_COARSE = cv2.saliency.StaticSaliencySpectralResidual().create()
+CV_SALIENCY_FINE = cv2.saliency.StaticSaliencyFineGrained().create()
 
 def tempsal_saliency(image):
     saliency = compute_saliency_map(image).mean(axis=2)
@@ -29,7 +30,7 @@ def tempsal_saliency(image):
 
     return saliency
 
-def paper_saliancy():
+def custom_saliency(input_image):
     """
     Computes the saliency map using the method given in the paper
 
@@ -39,8 +40,19 @@ def paper_saliancy():
     Returns:
         None
     """
+    lab_image = cv2.cvtColor(input_image, cv2.COLOR_RGB2Lab)
+    _, A, B = cv2.split(lab_image)
 
-    pass
+    chroma = np.sqrt(A.astype(np.float32) ** 2 + B.astype(np.float32) ** 2)
+    C_norm = cv2.normalize(chroma, None, 0, 255, cv2.NORM_MINMAX)
+
+    mean = C_norm.mean()
+    C_norm = np.abs(C_norm - mean)
+
+    C_norm -= C_norm.min()
+    C_norm = C_norm/C_norm.max()
+
+    return C_norm
 
 def course_saliancy(input_image):
     """
@@ -56,17 +68,9 @@ def course_saliancy(input_image):
     """
 
     # We want to apply the formula : ||I_{mean} - I_{pixel}(x,y)|| for every pixel of the given image
-    
-    lab_image = cv2.cvtColor(input_image, cv2.COLOR_RGB2Lab)
-    _, A, B = cv2.split(lab_image)
-
-    chroma = np.sqrt(A.astype(np.float32) ** 2 + B.astype(np.float32) ** 2)
-    C_norm = cv2.normalize(chroma, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-
-    # Back to rgb
-    C_norm = cv2.cvtColor(C_norm, cv2.COLOR_GRAY2RGB)
-
-    return C_norm
+    mean = np.mean(input_image, axis=(0,1))
+    s_map = np.linalg.norm(mean-input_image, axis=2)
+    return s_map
 
 
 def opencv_saliency(input_image):
@@ -75,7 +79,7 @@ def opencv_saliency(input_image):
     Returns:
         None
     """
-    _, saliency = CV_SALIENCY.computeSaliency(input_image)
+    _, saliency = CV_SALIENCY_COARSE.computeSaliency(input_image)
     saliency /= saliency.max()
     assert not np.any(saliency < 0)
     return saliency

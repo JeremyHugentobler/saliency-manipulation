@@ -17,7 +17,7 @@ MAX_ITERATION = 10
 PATCH_MATCH_MAX_ITER = 2*10 # each "iterartion" is (rdm search + propagate)
 EPSILON = 100
 
-def minimize_J_global_poisson(J, original_I, R, d_positive, d_negative, d_pos_mask, d_neg_mask, patch_size, lambda_factor=5):
+def minimize_J_global_poisson(J, original_I, R, d_positive, d_negative, d_pos_mask, d_neg_mask, patch_size, lambda_factor=0.8):
     """
     Core function that tries to minimize the following energy function:
         E(J,D+,D-) = E+ + E- + E_delta
@@ -80,7 +80,7 @@ def minimize_J_global_poisson(J, original_I, R, d_positive, d_negative, d_pos_ma
     print("  - Applying Poisson Screening...")
 
     poisson = J_patched.copy()
-    for _ in range(10):
+    for _ in range(20):
         poisson = screen_poisson(original_I, poisson, lambda_factor=lambda_factor)
 
     # diff = np.abs(poisson - J)

@@ -24,7 +24,7 @@ EPSILON = 1e-4
 ############################
 #    Modular Definitions   # 
 ############################
-compute_saliency_map = sm.opencv_saliency
+compute_saliency_map = sm.custom_saliency
 minimize_J = opt.minimize_J_global_poisson
 compute_database = db.compute_location_database
 
@@ -146,7 +146,7 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7,
     print("Done")
     return J[0], tau_positive, tau_negative
 
-def image_update_only(input_image, R, iterations, tau_positive, tau_negative, patch_size=7):
+def image_update_only(input_image, original_img, R, iterations, tau_positive, tau_negative, patch_size=7):
     """Called for image at finer scales, it's basically only the second part of 'manipulate_saliency' and refered as 'image update' in the paper.
 
     Args:
@@ -160,6 +160,7 @@ def image_update_only(input_image, R, iterations, tau_positive, tau_negative, pa
     
     # Input in RGB, transform to Lab
     image = input_image.copy()
+    original_img_lab = cv2.cvtColor(original_img, cv2.COLOR_RGB2Lab)
         
     for i in range(iterations):
         
@@ -171,7 +172,7 @@ def image_update_only(input_image, R, iterations, tau_positive, tau_negative, pa
         # Convert in Lab
         image = cv2.cvtColor(image, cv2.COLOR_RGB2Lab)
         # Compute the image update
-        image = minimize_J(image, R, D_positive, D_negative, D_pos_mask, D_neg_mask, patch_size)
+        image = minimize_J(image, original_img_lab, R, D_positive, D_negative, D_pos_mask, D_neg_mask, patch_size)
         # Convert back in RGB
         image = cv2.cvtColor(image, cv2.COLOR_Lab2RGB)
 
@@ -282,9 +283,9 @@ if __name__ == "__main__":
     # Starting with the coarsest image
     utils.header_print("\nRunning the algorithm on the coarsest image...")
     
-    coarse_image, tau_positive, tau_negative = manipulate_saliency(img, mask_image, delta_s, max_iteration=10)
+    coarse_image, tau_positive, tau_negative = manipulate_saliency(img, mask_image, delta_s, max_iteration=2)
     utils.display_image(coarse_image, pyramids[-1])
-    input_image_ds = pyramids[-1].copy()
+    original_img = pyramids[-1].copy()
     pyramids[-1] = coarse_image
     
     # Now, we use those tau + and tau - to run the algorithm on the images at finer scales without having to compute them again
@@ -297,6 +298,8 @@ if __name__ == "__main__":
         lap = laplacian[n - 1 - i]
         # print the sizes
         reconstruced = reconstruct(img, lap)
+        og_reconsructed = reconstruct(original_img, lap)
+        utils.display_image(reconstruced, og_reconsructed)
         mask_image = mask_pyramids[n - i - 1]
 
         # Rebinearize the mask
@@ -304,9 +307,10 @@ if __name__ == "__main__":
         mask_image[mask_image > 0] = 1
                 
         # We call the image update function
-        img = image_update_only(reconstruced, input_image_ds, mask_image, 2, tau_positive, tau_negative)
+        img = image_update_only(reconstruced, og_reconsructed, mask_image, 2, tau_positive, tau_negative)
         
         # We put the image back in the pyramid
+        original_img = pyramids[n - 1 - i].copy()
         pyramids[n - 1 - i] = img
         # display the image at this scale
         plt.figure(figsize=(10,10))
