@@ -143,11 +143,8 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7,
         J[0] = J[1]
         J[1] = temp
 
-
-        # print("\033[A\033[K\033[A\033[K\033[A\033[K\033[A\033[K\033[A\033[K\033[A\033[K\033[A\033[K", end="")
-
     print("Done")
-    return J[0], tau_positive, tau_negative, saliency_contrast, s_maps, images
+    return images, s_maps, tau_positive, tau_negative, saliency_contrast
 
 def image_update_only(input_image, original_img, R, iterations, tau_positive, tau_negative, patch_size=7):
     """Called for image at finer scales, it's basically only the second part of 'manipulate_saliency' and refered as 'image update' in the paper.
@@ -161,6 +158,10 @@ def image_update_only(input_image, original_img, R, iterations, tau_positive, ta
         patch_size (int, optional): The patch size. Defaults to 7.
     """    
     
+    # buffers
+    images = []
+    s_maps = []
+
     # Input in RGB, transform to Lab
     image = input_image.copy()
     original_img_lab = cv2.cvtColor(original_img, cv2.COLOR_RGB2Lab)
@@ -171,6 +172,9 @@ def image_update_only(input_image, original_img, R, iterations, tau_positive, ta
         
         # Get the saliency map
         s_map = compute_saliency_map(image)
+        s_maps.append(s_map.copy())
+        saliency_contrast.append(phi(s_map, R))
+
         # Get the databases
         D_positive, D_negative, D_pos_mask, D_neg_mask = compute_database(tau_positive, tau_negative, image, s_map)
         
@@ -178,12 +182,13 @@ def image_update_only(input_image, original_img, R, iterations, tau_positive, ta
         image = cv2.cvtColor(image, cv2.COLOR_RGB2Lab)
         # Compute the image update
         image = minimize_J(image, original_img_lab, R, D_positive, D_negative, D_pos_mask, D_neg_mask, patch_size)
-        # Convert back in RGB
 
-        saliency_contrast.append(phi(s_map, R))
+        # Convert back in RGB
         image = cv2.cvtColor(image, cv2.COLOR_Lab2RGB)
 
-    return image, saliency_contrast
+        images.append(image.copy())
+
+    return images, s_maps, saliency_contrast
 
 def phi(S_J, R):
     """
@@ -274,8 +279,10 @@ if __name__ == "__main__":
     # Read Mask    
     mask_image = cv2.imread(mask_path)
     mask_image = cv2.cvtColor(mask_image, cv2.COLOR_BGR2GRAY)
+
+    h, w = input_image.shape[:2]
     
-    mask_image = cv2.resize(mask_image, (input_image.shape[1], input_image.shape[0]), interpolation=cv2.INTER_NEAREST)
+    mask_image = cv2.resize(mask_image, (w, h), interpolation=cv2.INTER_NEAREST)
     assert input_image.shape[:2] == mask_image.shape[:2], "Image and mask must match in size"
 
     # Compute the pyramids
@@ -292,31 +299,18 @@ if __name__ == "__main__":
 
     # Buffers
     saliency_contrast = []
+    s_maps = []
+    images = []
 
     # Starting with the coarsest image
     utils.header_print("\nRunning the algorithm on the coarsest image...")
     
-    coarse_image, tau_positive, tau_negative, saliency, s_maps, images = manipulate_saliency(img, mask_image, delta_s, max_iteration=6)
+    coarse_images, coarse_s_maps, tau_positive, tau_negative, saliency = manipulate_saliency(img, mask_image, delta_s, max_iteration=8)
+    coarse_image = coarse_images[-1].copy()
 
-    s_maps = [Image.fromarray((s_map * 255).astype(np.uint8)) for s_map in s_maps]
-    images = [Image.fromarray(img) for img in images]
-
-    s_maps[0].save(
-        './output/saliency_animation.gif',
-        save_all=True,
-        append_images=s_maps[1:],
-        duration=200,
-        loop=0
-    )
-    
-    images[0].save(
-        './output/animation.gif',
-        save_all=True,
-        append_images=images[1:],
-        duration=200,
-        loop=0
-    )
-
+    # Save info
+    images.extend(coarse_images)
+    s_maps.extend(coarse_s_maps)
     saliency_contrast.extend(saliency)
 
     original_img = pyramids[-1].copy()
@@ -341,17 +335,46 @@ if __name__ == "__main__":
         mask_image[mask_image > 0] = 1
                 
         # We call the image update function
-        img, saliency = image_update_only(reconstruced, og_reconsructed, mask_image, 2, tau_positive, tau_negative)
+        iter_imgs, iter_s_maps, saliency = image_update_only(reconstruced, og_reconsructed, mask_image, 2, tau_positive, tau_negative)
+        img = iter_imgs[-1].copy()
+
+        # store infos
         saliency_contrast.extend(saliency)
+        images.extend(iter_imgs)
+        s_maps.extend(iter_s_maps)
+
         # We put the image back in the pyramid
         original_img = pyramids[n - 1 - i].copy()
         pyramids[n - 1 - i] = img
         # display the image at this scale
-        plt.figure(figsize=(10,10))
-        plt.imshow(img)
-        plt.axis('off')
-        plt.show()
+        # plt.figure(figsize=(10,10))
+        # plt.imshow(img)
+        # plt.axis('off')
+        # plt.show()
     
+    # Save animations
+    images = [cv2.resize(img, (w, h), interpolation=cv2.INTER_LINEAR) for img in images]
+    s_maps = [cv2.resize(s_map, (w, h), interpolation=cv2.INTER_LINEAR) for s_map in s_maps]
+
+    images = [Image.fromarray(img) for img in images]
+    s_maps = [Image.fromarray((s_map * 255).astype(np.uint8)) for s_map in coarse_s_maps]
+
+    s_maps[0].save(
+        './output/saliency_animation.gif',
+        save_all=True,
+        append_images=s_maps[1:],
+        duration=200,
+        loop=0
+    )
+    
+    images[0].save(
+        './output/animation.gif',
+        save_all=True,
+        append_images=images[1:],
+        duration=200,
+        loop=0
+    )
+
     
     utils.display_images(pyramids)
     final_image = img
