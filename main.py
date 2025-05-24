@@ -71,6 +71,8 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7,
     kernel = np.ones((radius, radius))
     mask_image = cv2.erode(R, kernel)
 
+    input_image_lab = cv2.cvtColor(input_image, cv2.COLOR_RGB2Lab)
+
     # Initialize the Database I_D +/-
     # I_D_positive, I_D_negative = [np.zeros_like(input_image) for _ in range(2)]
     
@@ -102,7 +104,7 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7,
         if convert:
             J[0] = cv2.cvtColor(J[0], cv2.COLOR_RGB2Lab)
 
-        J[1] = minimize_J(J[0], mask_image, D_positive, D_negative, D_pos_mask, D_neg_mask, patch_size)
+        J[1] = minimize_J(J[0], input_image_lab, mask_image, D_positive, D_negative, D_pos_mask, D_neg_mask, patch_size)
         print(" - Done.")
 
         # Convert back into RGB
@@ -282,6 +284,7 @@ if __name__ == "__main__":
     
     coarse_image, tau_positive, tau_negative = manipulate_saliency(img, mask_image, delta_s, max_iteration=10)
     utils.display_image(coarse_image, pyramids[-1])
+    input_image_ds = pyramids[-1].copy()
     pyramids[-1] = coarse_image
     
     # Now, we use those tau + and tau - to run the algorithm on the images at finer scales without having to compute them again
@@ -301,7 +304,7 @@ if __name__ == "__main__":
         mask_image[mask_image > 0] = 1
                 
         # We call the image update function
-        img = image_update_only(reconstruced, mask_image, 2, tau_positive, tau_negative)
+        img = image_update_only(reconstruced, input_image_ds, mask_image, 2, tau_positive, tau_negative)
         
         # We put the image back in the pyramid
         pyramids[n - 1 - i] = img
