@@ -17,7 +17,7 @@ MAX_ITERATION = 10
 PATCH_MATCH_MAX_ITER = 2*10 # each "iterartion" is (rdm search + propagate)
 EPSILON = 100
 
-def minimize_J_global_poisson(J, original_I, R, d_positive, d_negative, d_pos_mask, d_neg_mask, patch_size, lambda_factor=0.8):
+def minimize_J_global_poisson(J, original_I, R, d_positive, d_negative, d_pos_mask, d_neg_mask, patch_size, lambda_factor=5):
     """
     Core function that tries to minimize the following energy function:
         E(J,D+,D-) = E+ + E- + E_delta
@@ -47,6 +47,13 @@ def minimize_J_global_poisson(J, original_I, R, d_positive, d_negative, d_pos_ma
 
     ### VOTING STEP
     print("    - Vote step")
+    # display_images([
+    #     cv2.cvtColor(J, cv2.COLOR_Lab2RGB),
+    #     cv2.cvtColor(J_patched, cv2.COLOR_Lab2RGB).astype(np.uint8)], titles=["Image", "Patched Image"])
+    
+    ### SCREEN-POISSON
+    print("  - Applying Poisson Screening...")
+
     # Blow up image into shape (w,h,p,p,3)
     J_patches = view_as_windows(J_paded, (patch_size, patch_size, 3))
     J_patches = J_patches.squeeze()
@@ -55,15 +62,50 @@ def minimize_J_global_poisson(J, original_I, R, d_positive, d_negative, d_pos_ma
     l_x, l_y = idxs + off_field[:,:,:2].transpose(2,0,1).astype(np.int32)
 
     # Retrieve patches from location
-    # J_patched = J[l_x, l_y]
     offseted_patches = J_patches[l_x, l_y]
 
     # Compute the mean of each patch
-    J_patched = offseted_patches.mean(axis=(2,3))
     per_pixel_patch_mean = offseted_patches.mean(axis=(2,3))
+    J_patched = per_pixel_patch_mean.astype(np.uint8)
 
+    # Separate foreground and background 
+    foreground = per_pixel_patch_mean[R>0]
+    background = per_pixel_patch_mean[R==0]
+
+    foreground_img = np.ones_like(per_pixel_patch_mean, dtype=np.float32) * foreground.mean(axis=0) 
+    background_img = np.ones_like(per_pixel_patch_mean, dtype=np.float32) * background.mean(axis=0)
+    
+    foreground_img[R>0] = foreground
+    background_img[R==0] = background
+
+    foreground_img = vote_image(foreground_img, patch_size)
+    background_img = vote_image(background_img, patch_size)
+
+    J_patched = background_img.copy()
+    J_patched[R>0] = foreground_img[R>0]
+
+    poisson = J_patched.copy()
+
+
+    for _ in range(20):
+        poisson = screen_poisson(original_I, poisson, lambda_factor=lambda_factor)
+
+    diff = np.abs(poisson - J)
+    display_images([
+        cv2.cvtColor(J_patched.astype(np.uint8), cv2.COLOR_Lab2RGB), 
+        cv2.cvtColor(poisson.astype(np.uint8), cv2.COLOR_Lab2RGB), 
+        cv2.cvtColor(diff.astype(np.uint8), cv2.COLOR_Lab2RGB),])
+
+    J_out = poisson
+    # J_out = screen_poisson_brightness(J, J_patched, lambda_factor=lambda_factor)
+    # J_out = screen_poisson_luminance(J, J_patched, lambda_factor=lambda_factor)
+
+    return J_out
+
+def vote_image(J, patch_size):
     # repad the mean image
-    per_pixel_patch_mean_padded = np.pad(per_pixel_patch_mean, ((radius, radius), (radius, radius), (0, 0)), mode='reflect')
+    r = patch_size // 2
+    per_pixel_patch_mean_padded = np.pad(J, ((r, r), (r, r), (0, 0)), mode='reflect')
 
     # Blow up image into shape (w,h,p,p,3) to get overlaping mean
     mean_patches = view_as_windows(per_pixel_patch_mean_padded, (patch_size, patch_size, 3))
@@ -72,28 +114,7 @@ def minimize_J_global_poisson(J, original_I, R, d_positive, d_negative, d_pos_ma
     # compute the patch mean of the per pixel mean
     J_patched = mean_patches.mean(axis=(2,3)).astype(np.uint8)
     
-    # display_images([
-    #     cv2.cvtColor(J, cv2.COLOR_Lab2RGB),
-    #     cv2.cvtColor(J_patched, cv2.COLOR_Lab2RGB).astype(np.uint8)], titles=["Image", "Patched Image"])
-    
-    ### SCREEN-POISSON
-    print("  - Applying Poisson Screening...")
-
-    poisson = J_patched.copy()
-    for _ in range(20):
-        poisson = screen_poisson(original_I, poisson, lambda_factor=lambda_factor)
-
-    # diff = np.abs(poisson - J)
-    # display_images([
-    #     cv2.cvtColor(J_patched.astype(np.uint8), cv2.COLOR_Lab2RGB), 
-    #     cv2.cvtColor(poisson.astype(np.uint8), cv2.COLOR_Lab2RGB), 
-    #     cv2.cvtColor(diff.astype(np.uint8), cv2.COLOR_Lab2RGB),])
-
-    J_out = poisson
-    # J_out = screen_poisson_brightness(J, J_patched, lambda_factor=lambda_factor)
-    # J_out = screen_poisson_luminance(J, J_patched, lambda_factor=lambda_factor)
-
-    return J_out
+    return J_patched
 
 def get_patch(J,x,y,patch_size):
     """ retrieve the patch with top left corner's coordinate = (x,y), check if valid too"""
@@ -239,7 +260,7 @@ def minimize_off_field_dist(off_field, J, R, patch_size, d_pos_mask, d_neg_mask)
     images.append(cv2.remap(J, val[1], val[0], cv2.INTER_LINEAR))
 
     p_mode = 0
-    r_max = min(width, height) // 4
+    r_max = min(width, height) // 3
     # Iterate and alternate between search and propagate
     for i in tqdm(range(PATCH_MATCH_MAX_ITER)):
         if i%2 == 0:
@@ -337,7 +358,7 @@ def screen_poisson(gradient_source, J_modified, lambda_factor):
     """
     n, m, _ = gradient_source.shape
     laplacian = cv2.Laplacian(gradient_source.astype(np.float32), cv2.CV_32F)
-    b = lambda_factor * J_modified.astype(np.float64) - laplacian
+    b = lambda_factor * J_modified.astype(np.float32) - laplacian
     res = np.zeros_like(b)
 
     def A(x):
@@ -347,7 +368,7 @@ def screen_poisson(gradient_source, J_modified, lambda_factor):
         return lambda_factor * x - lap.flatten()
 
     for c in range(3):
-        blended, _ = cg(LinearOperator((n*m, n*m), matvec=A), b[:,:,c].flatten(), x0=gradient_source[:,:,c].flatten().astype(np.float64), maxiter=200)
+        blended, _ = cg(LinearOperator((n*m, n*m), matvec=A), b[:,:,c].flatten(), x0=gradient_source[:,:,c].flatten().astype(np.float32), maxiter=200)
         res[:,:,c] = blended.reshape((n,m))
 
     # mean correction

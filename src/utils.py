@@ -55,7 +55,7 @@ def display_images(images, titles=[], imperrow=3):
         for j in range(l):
             idx = i*imperrow + j
             plt.subplot(x+1, imperrow, idx+1)
-            plt.imshow(images[idx])
+            plt.imshow(images[idx], cmap='coolwarm')
             plt.axis('off')
             if len(titles) != 0:
                 plt.title(titles[idx]) 

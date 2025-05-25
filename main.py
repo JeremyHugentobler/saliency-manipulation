@@ -118,6 +118,9 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7,
         s_maps.append(S_J.copy())
         print(" - Done.")
 
+        s_diff = S_J - s_maps[-2]
+        utils.display_images([J[0], J[1],S_J,s_diff])
+
         # Compute criterions
         criterion = compute_criterion(S_J, R, delta_s)
         saliency_contrast.append(phi(S_J, R))
@@ -130,7 +133,7 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7,
             break
         
         # Check if convergence is reached by delta_s
-        if criterion < EPSILON:
+        if criterion < EPSILON or phi(S_J, R) > delta_s:
             print(" - Criterion convergence reached.")
             break
 
@@ -305,7 +308,7 @@ if __name__ == "__main__":
     # Starting with the coarsest image
     utils.header_print("\nRunning the algorithm on the coarsest image...")
     
-    coarse_images, coarse_s_maps, tau_positive, tau_negative, saliency = manipulate_saliency(img, mask_image, delta_s, max_iteration=20)
+    coarse_images, coarse_s_maps, tau_positive, tau_negative, saliency = manipulate_saliency(img, mask_image, delta_s, max_iteration=8)
     coarse_image = coarse_images[-1].copy()
 
     # Save info
