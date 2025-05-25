@@ -41,18 +41,24 @@ def custom_saliency(input_image):
         None
     """
     lab_image = cv2.cvtColor(input_image, cv2.COLOR_RGB2Lab)
-    _, A, B = cv2.split(lab_image)
+    L, A, B = cv2.split(lab_image)
 
+    # Compute the color contrast
     chroma = np.sqrt(A.astype(np.float32) ** 2 + B.astype(np.float32) ** 2)
-    C_norm = cv2.normalize(chroma, None, 0, 255, cv2.NORM_MINMAX)
 
-    mean = C_norm.mean()
-    C_norm = np.abs(C_norm - mean)
+    C_median = np.median(chroma)    
+    L_median = np.percentile(L, 33)     # Favoring lighntess over darkness
 
-    C_norm -= C_norm.min()
-    C_norm = C_norm/C_norm.max()
+    chroma = np.abs(chroma - C_median)
+    L = np.abs(L - L_median)
 
-    return C_norm
+    # Nomalize for comparable values
+    C_norm = (chroma - chroma.min()) / (chroma.max() - chroma.min()) 
+    L_norm = (L - L.min()) / (L.max() - L.min()) 
+
+    s_map = np.sqrt(C_norm ** 2 + L_norm ** 3)
+
+    return s_map
 
 def course_saliancy(input_image):
     """

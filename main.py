@@ -305,7 +305,7 @@ if __name__ == "__main__":
     # Starting with the coarsest image
     utils.header_print("\nRunning the algorithm on the coarsest image...")
     
-    coarse_images, coarse_s_maps, tau_positive, tau_negative, saliency = manipulate_saliency(img, mask_image, delta_s, max_iteration=8)
+    coarse_images, coarse_s_maps, tau_positive, tau_negative, saliency = manipulate_saliency(img, mask_image, delta_s, max_iteration=20)
     coarse_image = coarse_images[-1].copy()
 
     # Save info
@@ -321,13 +321,16 @@ if __name__ == "__main__":
     utils.header_print("\nRunning the algorithm on the finer images...")
     
     for i in range(n):
+        # more iteration at the beginning then at the end
+        nb_of_iterations = ((n - i))**2
+
         # We take the image at one scale finer and get it back to the original size
         img = pyramids[n - i]
         lap = laplacian[n - 1 - i]
         # print the sizes
         reconstruced = reconstruct(img, lap)
         og_reconsructed = reconstruct(original_img, lap)
-        utils.display_image(reconstruced, og_reconsructed)
+        utils.display_images([og_reconsructed, reconstruced, s_maps[-1]], ["Original", "Reconstructed", "Saliency Map"])
         mask_image = mask_pyramids[n - i - 1]
 
         # Rebinearize the mask
@@ -335,7 +338,7 @@ if __name__ == "__main__":
         mask_image[mask_image > 0] = 1
                 
         # We call the image update function
-        iter_imgs, iter_s_maps, saliency = image_update_only(reconstruced, og_reconsructed, mask_image, 2, tau_positive, tau_negative)
+        iter_imgs, iter_s_maps, saliency = image_update_only(reconstruced, og_reconsructed, mask_image, nb_of_iterations, tau_positive, tau_negative)
         img = iter_imgs[-1].copy()
 
         # store infos
@@ -357,7 +360,7 @@ if __name__ == "__main__":
     s_maps = [cv2.resize(s_map, (w, h), interpolation=cv2.INTER_LINEAR) for s_map in s_maps]
 
     images = [Image.fromarray(img) for img in images]
-    s_maps = [Image.fromarray((s_map * 255).astype(np.uint8)) for s_map in coarse_s_maps]
+    s_maps = [Image.fromarray((s_map * 255).astype(np.uint8)) for s_map in s_maps]
 
     s_maps[0].save(
         './output/saliency_animation.gif',
@@ -380,7 +383,8 @@ if __name__ == "__main__":
     final_image = img
     
     # Display the original image and the saliency map
-    utils.display_images([input_image, final_image, mask_image], ["intput", "modified", "mask"])
+    input_s_map = compute_saliency_map(input_image)
+    utils.display_images([input_image, final_image, mask_image, input_s_map, s_maps[-1]], ["intput", "modified", "mask", "input saliency map", "final saliency map"])
 
     plt.plot(saliency_contrast)
     plt.title("Saliency contrast over iterations")
