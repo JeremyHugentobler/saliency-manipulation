@@ -31,7 +31,7 @@ compute_database = db.compute_location_database
 
 
 
-def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7, learning_rate=0.1, convert=True):
+def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7, learning_rate=0.2, convert=True):
     """
     This is the main function that will implement the saliency manipulation algorithm
     as described in the paper. The input image will see its region of interest R defined by
@@ -53,8 +53,8 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7,
     ################################
 
     # Initialize tau +/-
-    tau_positive = 0.1
-    tau_negative = 0.9
+    tau_positive = 0.5
+    tau_negative = 0.5
 
     print("\ninitalizing variables")
 

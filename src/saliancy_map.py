@@ -40,23 +40,32 @@ def custom_saliency(input_image):
     Returns:
         None
     """
+
     lab_image = cv2.cvtColor(input_image, cv2.COLOR_RGB2Lab)
-    L, A, B = cv2.split(lab_image)
+
+    # compute saliency on pathch's mean
+    lab_padded = np.pad(lab_image, ((2, 2), (2, 2), (0, 0)), mode='reflect')
+    lab_patches = skimage.util.view_as_windows(lab_padded, (5, 5, 3))
+    lab_patches = lab_patches.squeeze()
+
+    lab_mean = np.mean(lab_patches, axis=(2, 3))
+
+    L, A, B = cv2.split(lab_mean)
 
     # Compute the color contrast
     chroma = np.sqrt(A.astype(np.float32) ** 2 + B.astype(np.float32) ** 2)
-
     C_median = np.median(chroma)    
-    L_median = np.percentile(L, 33)     # Favoring lighntess over darkness
+    chroma = (chroma - C_median) ** 2
 
-    chroma = np.abs(chroma - C_median)
-    L = np.abs(L - L_median)
+    # Compute the luminance contrast
+    L_median = np.median(L)
+    L = (L - L_median) ** 2
 
     # Nomalize for comparable values
-    C_norm = (chroma - chroma.min()) / (chroma.max() - chroma.min()) 
-    L_norm = (L - L.min()) / (L.max() - L.min()) 
+    C_norm = (chroma - chroma.min()) / (chroma.max() - chroma.min() + 1e-6)
+    L_norm = (L - L.min()) / (L.max() - L.min() + 1e-6)
 
-    s_map = np.sqrt(C_norm ** 2 + L_norm ** 3)
+    s_map = np.sqrt(C_norm ** 2 + (L_norm ** 2)/2)
 
     return s_map
 

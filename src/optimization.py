@@ -354,7 +354,6 @@ def screen_poisson(gradient_source, J_modified, lambda_factor):
     mean_diff = res.mean(axis=(0, 1)) - gradient_source.mean(axis=(0, 1))
     res -= mean_diff
 
-    res = np.clip(res, 0, 255)
     res = np.floor(res).astype(np.uint8)
  
     return res
