@@ -92,10 +92,11 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7,
         D_positive, D_negative, D_pos_mask, D_neg_mask = compute_database(tau_positive, tau_negative, J[0], S_J)
         print(f" - Done, DB+ size: {D_positive.shape[0]}, DB- size: {D_negative.shape[0]}")
         
-        # Construct and display the database's images
-        # I_D_positive, I_D_negative = db.compute_image_database(J[0], D_positive, D_negative)
+        if utils.VERBOSE:
+            # Construct and display the database's images
+            I_D_positive, I_D_negative = db.compute_image_database(J[0], D_positive, D_negative)
 
-        # utils.display_images([S_J, I_D_positive, I_D_negative])
+            utils.display_images([S_J, I_D_positive, I_D_negative])
 
         # update J to minimize the energy function
         print(" - Minimizing function...")
@@ -119,7 +120,8 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7,
         print(" - Done.")
 
         s_diff = S_J - s_maps[-2]
-        utils.display_images([J[0], J[1],S_J,s_diff])
+        if utils.VERBOSE:
+            utils.display_images([J[0], J[1],S_J,s_diff])
 
         # Compute criterions
         criterion = compute_criterion(S_J, R, delta_s)
@@ -325,7 +327,7 @@ if __name__ == "__main__":
     
     for i in range(n):
         # more iteration at the beginning then at the end
-        nb_of_iterations = ((n - i))**2 -1
+        nb_of_iterations = ((n - i))**2
 
         # We take the image at one scale finer and get it back to the original size
         img = pyramids[n - i]
@@ -333,7 +335,8 @@ if __name__ == "__main__":
         # print the sizes
         reconstruced = reconstruct(img, lap)
         og_reconsructed = reconstruct(original_img, lap)
-        utils.display_images([og_reconsructed, reconstruced, s_maps[-1]], ["Original", "Reconstructed", "Saliency Map"])
+        if utils.VERBOSE:
+            utils.display_images([og_reconsructed, reconstruced, s_maps[-1]], ["Original", "Reconstructed", "Saliency Map"])
         mask_image = mask_pyramids[n - i - 1]
 
         # Rebinearize the mask
@@ -381,8 +384,8 @@ if __name__ == "__main__":
         loop=0
     )
 
-    
-    utils.display_images(pyramids)
+    if utils.VERBOSE:
+        utils.display_images(pyramids)
     final_image = img
     
     # Display the original image and the saliency map
