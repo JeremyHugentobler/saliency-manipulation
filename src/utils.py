@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2, skimage, os, sys
 
-VERBOSE = True
+VERBOSE = False
 
 def header_print(title):
     """Function to print a title with # around it
