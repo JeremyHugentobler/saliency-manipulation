@@ -53,8 +53,8 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7,
     ################################
 
     # Initialize tau +/-
-    tau_positive = 0.5
-    tau_negative = 0.5
+    tau_positive = 0.3
+    tau_negative = 0.7
 
     print("\ninitalizing variables")
 
@@ -325,7 +325,7 @@ if __name__ == "__main__":
     
     for i in range(n):
         # more iteration at the beginning then at the end
-        nb_of_iterations = ((n - i))**2
+        nb_of_iterations = ((n - i))**2 -1
 
         # We take the image at one scale finer and get it back to the original size
         img = pyramids[n - i]

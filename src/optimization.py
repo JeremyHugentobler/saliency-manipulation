@@ -69,20 +69,20 @@ def minimize_J_global_poisson(J, original_I, R, d_positive, d_negative, d_pos_ma
     J_patched = per_pixel_patch_mean.astype(np.uint8)
 
     # Separate foreground and background 
-    foreground = per_pixel_patch_mean[R>0]
-    background = per_pixel_patch_mean[R==0]
+    # foreground = per_pixel_patch_mean[R>0]
+    # background = per_pixel_patch_mean[R==0]
 
-    foreground_img = np.ones_like(per_pixel_patch_mean, dtype=np.float32) * foreground.mean(axis=0) 
-    background_img = np.ones_like(per_pixel_patch_mean, dtype=np.float32) * background.mean(axis=0)
+    # foreground_img = np.ones_like(per_pixel_patch_mean, dtype=np.float32) * foreground.mean(axis=0) 
+    # background_img = np.ones_like(per_pixel_patch_mean, dtype=np.float32) * background.mean(axis=0)
     
-    foreground_img[R>0] = foreground
-    background_img[R==0] = background
+    # foreground_img[R>0] = foreground
+    # background_img[R==0] = background
 
-    foreground_img = vote_image(foreground_img, patch_size)
-    background_img = vote_image(background_img, patch_size)
+    # foreground_img = vote_image(foreground_img, patch_size)
+    # background_img = vote_image(background_img, patch_size)
 
-    J_patched = background_img.copy()
-    J_patched[R>0] = foreground_img[R>0]
+    # J_patched = background_img.copy()
+    # J_patched[R>0] = foreground_img[R>0]
 
     poisson = J_patched.copy()
 
@@ -90,13 +90,17 @@ def minimize_J_global_poisson(J, original_I, R, d_positive, d_negative, d_pos_ma
     for _ in range(20):
         poisson = screen_poisson(original_I, poisson, lambda_factor=lambda_factor)
 
+    # mean correction
+    mean_diff = poisson.mean(axis=(0, 1)) - original_I.mean(axis=(0, 1))
+    J_out =  (poisson - mean_diff).astype(np.uint8)
+
+
     diff = np.abs(poisson - J)
     display_images([
         cv2.cvtColor(J_patched.astype(np.uint8), cv2.COLOR_Lab2RGB), 
-        cv2.cvtColor(poisson.astype(np.uint8), cv2.COLOR_Lab2RGB), 
+        cv2.cvtColor(J_out, cv2.COLOR_Lab2RGB), 
         cv2.cvtColor(diff.astype(np.uint8), cv2.COLOR_Lab2RGB),])
 
-    J_out = poisson
     # J_out = screen_poisson_brightness(J, J_patched, lambda_factor=lambda_factor)
     # J_out = screen_poisson_luminance(J, J_patched, lambda_factor=lambda_factor)
 
@@ -368,13 +372,11 @@ def screen_poisson(gradient_source, J_modified, lambda_factor):
         return lambda_factor * x - lap.flatten()
 
     for c in range(3):
-        blended, _ = cg(LinearOperator((n*m, n*m), matvec=A), b[:,:,c].flatten(), x0=gradient_source[:,:,c].flatten().astype(np.float32), maxiter=200)
+        blended, _ = cg(LinearOperator((n*m, n*m), matvec=A), b[:,:,c].flatten())
         res[:,:,c] = blended.reshape((n,m))
 
-    # mean correction
-    mean_diff = res.mean(axis=(0, 1)) - gradient_source.mean(axis=(0, 1))
-    res -= mean_diff
 
+    # res = np.abs(res)
     res = np.floor(res).astype(np.uint8)
  
     return res
