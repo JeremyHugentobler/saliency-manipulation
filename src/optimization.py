@@ -17,7 +17,7 @@ MAX_ITERATION = 10
 PATCH_MATCH_MAX_ITER = 2*10 # each "iterartion" is (rdm search + propagate)
 EPSILON = 100
 
-def minimize_J_global_poisson(J, original_I, R, d_positive, d_negative, d_pos_mask, d_neg_mask, patch_size, lambda_factor=5):
+def minimize_J_global_poisson(J, original_I, R, d_positive, d_negative, d_pos_mask, d_neg_mask, patch_size, lambda_factor=3):
     """
     Core function that tries to minimize the following energy function:
         E(J,D+,D-) = E+ + E- + E_delta
