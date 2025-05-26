@@ -5,10 +5,11 @@ import numpy as np
 from pathlib import Path
 import sys
 import torch
-from src.tempsal_wrapper import compute_saliency_map
+# from src.tempsal_wrapper import compute_saliency_map
 
 
-CV_SALIENCY = cv2.saliency.StaticSaliencySpectralResidual_create()
+CV_SALIENCY_COARSE = cv2.saliency.StaticSaliencySpectralResidual().create()
+CV_SALIENCY_FINE = cv2.saliency.StaticSaliencyFineGrained().create()
 
 def tempsal_saliency(image):
     saliency = compute_saliency_map(image).mean(axis=2)
@@ -29,7 +30,7 @@ def tempsal_saliency(image):
 
     return saliency
 
-def paper_saliancy():
+def custom_saliency(input_image):
     """
     Computes the saliency map using the method given in the paper
 
@@ -40,7 +41,33 @@ def paper_saliancy():
         None
     """
 
-    pass
+    lab_image = cv2.cvtColor(input_image, cv2.COLOR_RGB2Lab)
+
+    # compute saliency on pathch's mean
+    lab_padded = np.pad(lab_image, ((2, 2), (2, 2), (0, 0)), mode='reflect')
+    lab_patches = skimage.util.view_as_windows(lab_padded, (5, 5, 3))
+    lab_patches = lab_patches.squeeze()
+
+    lab_mean = np.mean(lab_patches, axis=(2, 3))
+
+    L, A, B = cv2.split(lab_mean)
+
+    # Compute the color contrast
+    chroma = np.sqrt(A.astype(np.float32) ** 2 + B.astype(np.float32) ** 2)
+    C_median = np.median(chroma)    
+    chroma = (chroma - C_median) ** 2
+
+    # Compute the luminance contrast
+    L_median = np.median(L)
+    L = (L - L_median) ** 2
+
+    # Nomalize for comparable values
+    C_norm = (chroma - chroma.min()) / (chroma.max() - chroma.min() + 1e-6)
+    L_norm = (L - L.min()) / (L.max() - L.min() + 1e-6)
+
+    s_map = np.sqrt(C_norm ** 2 + (L_norm ** 2)/2)
+
+    return s_map
 
 def course_saliancy(input_image):
     """
@@ -56,17 +83,9 @@ def course_saliancy(input_image):
     """
 
     # We want to apply the formula : ||I_{mean} - I_{pixel}(x,y)|| for every pixel of the given image
-    
-    lab_image = cv2.cvtColor(input_image, cv2.COLOR_RGB2Lab)
-    _, A, B = cv2.split(lab_image)
-
-    chroma = np.sqrt(A.astype(np.float32) ** 2 + B.astype(np.float32) ** 2)
-    C_norm = cv2.normalize(chroma, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-
-    # Back to rgb
-    C_norm = cv2.cvtColor(C_norm, cv2.COLOR_GRAY2RGB)
-
-    return C_norm
+    mean = np.mean(input_image, axis=(0,1))
+    s_map = np.linalg.norm(mean-input_image, axis=2)
+    return s_map
 
 
 def opencv_saliency(input_image):
@@ -75,7 +94,7 @@ def opencv_saliency(input_image):
     Returns:
         None
     """
-    _, saliency = CV_SALIENCY.computeSaliency(input_image)
+    _, saliency = CV_SALIENCY_COARSE.computeSaliency(input_image)
     saliency /= saliency.max()
     assert not np.any(saliency < 0)
     return saliency

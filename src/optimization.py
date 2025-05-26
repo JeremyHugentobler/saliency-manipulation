@@ -15,9 +15,9 @@ from src.utils import display_images
 STRIDE = 1
 MAX_ITERATION = 10
 PATCH_MATCH_MAX_ITER = 2*10 # each "iterartion" is (rdm search + propagate)
-EPSILON = 1e5
+EPSILON = 100
 
-def minimize_J_global_poisson(J, R, d_positive, d_negative, d_pos_mask, d_neg_mask, patch_size, lambda_factor=0.5):
+def minimize_J_global_poisson(J, original_I, R, d_positive, d_negative, d_pos_mask, d_neg_mask, patch_size, lambda_factor=5):
     """
     Core function that tries to minimize the following energy function:
         E(J,D+,D-) = E+ + E- + E_delta
@@ -38,6 +38,7 @@ def minimize_J_global_poisson(J, R, d_positive, d_negative, d_pos_mask, d_neg_ma
     else:
         J_paded = J
 
+    # off_field = np.zeros((width, height, 3), dtype=np.int32)
     off_field = generate_random_offset_field(R, J_paded, patch_size, d_positive, d_negative, d_pos_mask, d_neg_mask)
     print("    - Offset field initialized")
     ### SEARCH STEP
@@ -46,6 +47,13 @@ def minimize_J_global_poisson(J, R, d_positive, d_negative, d_pos_mask, d_neg_ma
 
     ### VOTING STEP
     print("    - Vote step")
+    # display_images([
+    #     cv2.cvtColor(J, cv2.COLOR_Lab2RGB),
+    #     cv2.cvtColor(J_patched, cv2.COLOR_Lab2RGB).astype(np.uint8)], titles=["Image", "Patched Image"])
+    
+    ### SCREEN-POISSON
+    print("  - Applying Poisson Screening...")
+
     # Blow up image into shape (w,h,p,p,3)
     J_patches = view_as_windows(J_paded, (patch_size, patch_size, 3))
     J_patches = J_patches.squeeze()
@@ -58,25 +66,55 @@ def minimize_J_global_poisson(J, R, d_positive, d_negative, d_pos_mask, d_neg_ma
 
     # Compute the mean of each patch
     per_pixel_patch_mean = offseted_patches.mean(axis=(2,3))
+    J_patched = per_pixel_patch_mean.astype(np.uint8)
 
+    # Separate foreground and background 
+    foreground = per_pixel_patch_mean[R>0]
+    background = per_pixel_patch_mean[R==0]
+
+    foreground_img = np.ones_like(per_pixel_patch_mean, dtype=np.float32) * foreground.mean(axis=0) 
+    background_img = np.ones_like(per_pixel_patch_mean, dtype=np.float32) * background.mean(axis=0)
+    
+    foreground_img[R>0] = foreground
+    background_img[R==0] = background
+
+    foreground_img = vote_image(foreground_img, patch_size)
+    background_img = vote_image(background_img, patch_size)
+
+    J_patched = background_img.copy()
+    J_patched[R>0] = foreground_img[R>0]
+
+    poisson = J_patched.copy()
+
+
+    for _ in range(20):
+        poisson = screen_poisson(original_I, poisson, lambda_factor=lambda_factor)
+
+    diff = np.abs(poisson - J)
+    display_images([
+        cv2.cvtColor(J_patched.astype(np.uint8), cv2.COLOR_Lab2RGB), 
+        cv2.cvtColor(poisson.astype(np.uint8), cv2.COLOR_Lab2RGB), 
+        cv2.cvtColor(diff.astype(np.uint8), cv2.COLOR_Lab2RGB),])
+
+    J_out = poisson
+    # J_out = screen_poisson_brightness(J, J_patched, lambda_factor=lambda_factor)
+    # J_out = screen_poisson_luminance(J, J_patched, lambda_factor=lambda_factor)
+
+    return J_out
+
+def vote_image(J, patch_size):
     # repad the mean image
-    per_pixel_patch_mean_padded = np.pad(per_pixel_patch_mean, ((radius, radius), (radius, radius), (0, 0)), mode='reflect')
+    r = patch_size // 2
+    per_pixel_patch_mean_padded = np.pad(J, ((r, r), (r, r), (0, 0)), mode='reflect')
 
     # Blow up image into shape (w,h,p,p,3) to get overlaping mean
     mean_patches = view_as_windows(per_pixel_patch_mean_padded, (patch_size, patch_size, 3))
     mean_patches = mean_patches.squeeze()
 
     # compute the patch mean of the per pixel mean
-    J_patched = mean_patches.mean(axis=(2,3))
+    J_patched = mean_patches.mean(axis=(2,3)).astype(np.uint8)
     
-    ### SCREEN-POISSON
-    print("  - Applying Poisson Screening...")
-
-    J_out = screen_poisson(J, J_patched, lambda_factor=lambda_factor)
-
-    # print("\033[A\033[K\033[A\033[K", end="")
-
-    return J_out
+    return J_patched
 
 def get_patch(J,x,y,patch_size):
     """ retrieve the patch with top left corner's coordinate = (x,y), check if valid too"""
@@ -89,12 +127,6 @@ def get_patch(J,x,y,patch_size):
     else:
         patch = J[x,y]
     return patch
-
-def compute_SSD(patch1, patch2):
-    """Computes Sum of Square Distance (SSD) between two patches of the same shape."""
-    if patch1.shape != patch2.shape:
-        return np.inf  # Incompatible patches — skip them
-    return np.sum((patch1 - patch2).astype(np.float64) ** 2)
 
 def compute_dist(J, off_field, patch_size):
     w, h = off_field.shape[:2]
@@ -120,7 +152,8 @@ def compute_dist(J, off_field, patch_size):
     # Retrieve patches from location
     offseted_patches = J_patches[l_x, l_y]
 
-    dists = np.sum((J_patches - offseted_patches).astype(np.float64) ** 2, axis=(2,3,4))
+    # Compute SSD
+    dists = np.sum((J_patches.astype(np.float64) - offseted_patches.astype(np.float64)) ** 2, axis=(2,3,4))
 
     # Correct the outsiders to be invalidated later
     if len(outsiders) > 0:
@@ -147,10 +180,8 @@ def generate_random_offset_field(R, J, patch_size, d_positive, d_negative, d_pos
     random_db_idx = np.random.randint(0, len(d_positive), (w,h))
     f_in = d_positive[random_db_idx]
     
-
     random_db_idx = np.random.randint(0, len(d_negative), (w,h))
     f_out = d_negative[random_db_idx]
-
 
     # From selected point to offset
     idxs = np.indices((w,h)).transpose(1,2,0)
@@ -184,7 +215,9 @@ def random_offset_field_jitter(offset_field, radius=5):
 
     return new_offset_f    
 
-def validated_candidates(off_field, candidates, J, patch_size, d_pos_mask, d_neg_mask):
+def validated_candidates(off_field, candidates, J, patch_size, R, d_pos_mask, d_neg_mask):
+
+    old_off_f = off_field.copy()
 
     # Recompute new SSD from candidates
     dists = compute_dist(J, candidates, patch_size)
@@ -192,12 +225,21 @@ def validated_candidates(off_field, candidates, J, patch_size, d_pos_mask, d_neg
     
     # Gather all the points where the candidates are better
     better_offset = candidates[:,:,2] < off_field[:,:,2]
-    
-    # check if new location is in right database
-    #TODO
 
     # Update the off_field correspondigly
     off_field[better_offset] = candidates[better_offset]
+    
+    # check if new location is in right database
+    w,h = off_field.shape[:2]
+    idxs = np.indices((w,h))
+    l_x, l_y = idxs + off_field[:,:,:2].transpose(2,0,1).astype(np.int32)
+
+    wrong_db = np.logical_or(
+        np.logical_and(R, np.logical_not(d_pos_mask[l_x, l_y])),                        # in mask, outside db+
+        np.logical_and(np.logical_not(R), np.logical_not(d_neg_mask[l_x, l_y]))         # not in mask, outside db-
+    )
+    
+    off_field[wrong_db] = old_off_f[wrong_db]
 
     return off_field
 
@@ -213,19 +255,18 @@ def minimize_off_field_dist(off_field, J, R, patch_size, d_pos_mask, d_neg_mask)
     images = []
 
     idxs = np.indices((width, height))
-    val = (idxs.transpose(1,2,0) + off_field[:,:,:2]).transpose(2,0,1).astype(np.float32)
+    val = (idxs.transpose(1,2,0) + off_field[:,:,:2]).transpose(2,0,1).astype(np.float32) + patch_size // 2
 
     images.append(cv2.remap(J, val[1], val[0], cv2.INTER_LINEAR))
 
     p_mode = 0
-    r_max = min(width, height) // 4
+    r_max = min(width, height) // 3
     # Iterate and alternate between search and propagate
-    for i in tqdm(range(PATCH_MATCH_MAX_ITER)):          
+    for i in tqdm(range(PATCH_MATCH_MAX_ITER)):
         if i%2 == 0:
             ### propagate mode
-            candidates = propagate(off_field, R, p_mode)
-                
-            off_field = validated_candidates(off_field, candidates, J, patch_size, d_pos_mask, d_neg_mask)
+            candidates = propagate(off_field, R, p_mode)                
+            off_field = validated_candidates(off_field, candidates, J, patch_size, R, d_pos_mask, d_neg_mask)
 
             p_mode = 1-p_mode
                 
@@ -235,24 +276,25 @@ def minimize_off_field_dist(off_field, J, R, patch_size, d_pos_mask, d_neg_mask)
             while r > 1:
                 # compare with randomly generated offset field
                 candidates = random_offset_field_jitter(off_field, radius=r)
-
-                off_field = validated_candidates(off_field, candidates, J, patch_size, d_pos_mask, d_neg_mask)
+                off_field = validated_candidates(off_field, candidates, J, patch_size, R, d_pos_mask, d_neg_mask)
                 
                 r = r//2        # halves the search radius for next iteration
 
         l_x, l_y = (idxs + off_field[:,:,:2].transpose(2,0,1)).astype(np.float32)
-
         assert not np.any(np.logical_or(
             np.logical_or(l_x < 0, l_x >= width),
             np.logical_or(l_y < 0, l_y >= height)
         )), "Wrong offset got accepted as valid"
-        images.append(cv2.remap(J, l_y, l_x, cv2.INTER_NEAREST))        
+
+        l_x += patch_size // 2
+        l_y += patch_size // 2
+        images.append(cv2.remap(J, l_y, l_x, cv2.INTER_NEAREST))
     
     # images = [Image.fromarray(img.astype(np.uint8)) for img in images]
     images = [Image.fromarray(cv2.cvtColor(img, cv2.COLOR_Lab2RGB).astype(np.uint8)) for img in images]
 
     images[0].save(
-        './output/animation.gif',
+        './output/PM_animation.gif',
         save_all=True,
         append_images=images[1:],
         duration=200,
@@ -265,28 +307,28 @@ def propagate(off_field, R, mode):
     """
     propaget an offset field in x and y direction, causal or anti causal given the mode selected.
     """
-    old_of = off_field.copy()
+    new_off_field = off_field.copy()
     
     if mode == 0:
         # Offset on x
         # gather mask of where the offsetted elements are better then the not ones (has to also be in the same region)
         x,y = np.where(np.logical_and(off_field[1:,:,2] < off_field[:-1,:,2], R[1:,:] == R[:-1,:]))
-        off_field[x,y] = off_field[x+1,y]
+        new_off_field[x,y] = off_field[x+1,y]
 
         # Offset on y
         # gather mask of where the offsetted elements are better then the not ones (has to also be in the same region)
         x,y = np.where(np.logical_and(off_field[:,1:,2] < off_field[:,:-1,2], R[:,1:] == R[:,:-1]))
-        off_field[x,y] = off_field[x,y+1]
+        new_off_field[x,y] = off_field[x,y+1]
     else:
         # Offset on x
         # gather mask of where the offsetted elements are better then the not ones (has to also be in the same region)
         x,y = np.where(np.logical_and(off_field[:-1,:,2] < off_field[1:,:,2], R[1:,:] == R[:-1,:]))
-        off_field[x+1,y] = off_field[x,y]
+        new_off_field[x+1,y] = off_field[x,y]
 
         # Offset on y
         # gather mask of where the offsetted elements are better then the not ones (has to also be in the same region)
         x,y = np.where(np.logical_and(off_field[:,:-1,2] < off_field[:,1:,2], R[:,1:] == R[:,:-1]))
-        off_field[x,y+1] = off_field[x,y]
+        new_off_field[x,y+1] = off_field[x,y]
 
     w, h = off_field.shape[:2]
 
@@ -299,11 +341,11 @@ def propagate(off_field, R, mode):
     )
 
     # and put them back to their old previous value
-    off_field[outside_points] = old_of[outside_points]
+    new_off_field[outside_points] = off_field[outside_points]
 
-    return off_field
+    return new_off_field
 
-def screen_poisson(J, J_modified, lambda_factor):
+def screen_poisson(gradient_source, J_modified, lambda_factor):
     """
     Screened Poisson optimization to smoothly blend the patched image with the original image.
 
@@ -314,9 +356,9 @@ def screen_poisson(J, J_modified, lambda_factor):
     Returns:    
         The blended image
     """
-    n, m, _ = J.shape
-    laplacian = cv2.Laplacian(J.astype(np.float32), cv2.CV_32F)
-    b = lambda_factor * J_modified.astype(np.float64) - laplacian
+    n, m, _ = gradient_source.shape
+    laplacian = cv2.Laplacian(gradient_source.astype(np.float32), cv2.CV_32F)
+    b = lambda_factor * J_modified.astype(np.float32) - laplacian
     res = np.zeros_like(b)
 
     def A(x):
@@ -326,24 +368,87 @@ def screen_poisson(J, J_modified, lambda_factor):
         return lambda_factor * x - lap.flatten()
 
     for c in range(3):
-        blended, _ = cg(LinearOperator((n*m, n*m), matvec=A), b[:,:,c].flatten(), x0=J[:,:,c].flatten().astype(np.float64))
+        blended, _ = cg(LinearOperator((n*m, n*m), matvec=A), b[:,:,c].flatten(), x0=gradient_source[:,:,c].flatten().astype(np.float32), maxiter=200)
         res[:,:,c] = blended.reshape((n,m))
 
+    # mean correction
+    mean_diff = res.mean(axis=(0, 1)) - gradient_source.mean(axis=(0, 1))
+    res -= mean_diff
 
-    ### Test with full image screening
-    # def A(x):
-
-    #     #lambda * f - grad^2(x)
-    #     lap = cv2.Laplacian(x.reshape(n,m,3).astype(np.float32), cv2.CV_32F)
-    #     return lambda_factor * x - lap.flatten()
-
-    # res, _ = cg(LinearOperator((n*m*3, n*m*3), matvec=A), b.flatten(), x0=J.flatten().astype(np.float64))
-    # res = res.reshape((n,m,3)
-
-    res = np.clip(res, 0, 255)
     res = np.floor(res).astype(np.uint8)
  
     return res
+
+def screen_poisson_brightness(J_lab, J_modified_lab, lambda_factor):
+    """
+    Screened Poisson blending on brightness (channel L in Lab) while preserving color.
+
+    Args:
+        J_lab: Original image in Lab color space (float32 or uint8)
+        J_modified_lab: Modified image in Lab color space (same shape as J_lab)
+        lambda_factor: Strength of Poisson smoothing
+
+    Returns:
+        Lab image after brightness-only Poisson blending
+    """
+    J_lab = J_lab.astype(np.float32)
+    J_modified_lab = J_modified_lab.astype(np.float32)
+
+    n, m, _ = J_lab.shape
+    J_L = J_lab[:, :, 0]  # Lightness channel
+    J_mod_L = J_modified_lab[:, :, 0]
+
+    # Compute right-hand side of linear system
+    lap = cv2.Laplacian(J_L, cv2.CV_32F)
+    b = lambda_factor * J_mod_L - lap
+
+    def A(x):
+        x_reshaped = x.reshape((n, m)).astype(np.float32)
+        lap_x = cv2.Laplacian(x_reshaped, cv2.CV_32F)
+        return (lambda_factor * x - lap_x.flatten())
+
+    # Solve Poisson equation for the L channel
+    x_blended, _ = cg(LinearOperator((n * m, n * m), matvec=A), b.flatten(), x0=J_L.flatten())
+    L_blended = x_blended.reshape((n, m))
+
+    # Merge back into Lab image
+    result_lab = J_lab.copy()
+    result_lab[:, :, 0] = L_blended
+
+    return np.clip(result_lab, 0, 255).astype(np.uint8)
+
+
+def screen_poisson_luminance(J, J_modified, lambda_factor):
+    """
+    Poisson blending only on perceptual luminance (Y from YUV), preserving color.
+    """
+    J = J.astype(np.float32)
+    J_modified = J_modified.astype(np.float32)
+    n, m, _ = J.shape
+
+    # Y = 0.299R + 0.587G + 0.114B
+    J_lum = 0.299 * J[:, :, 0] + 0.587 * J[:, :, 1] + 0.114 * J[:, :, 2]
+    J_mod_lum = 0.299 * J_modified[:, :, 0] + 0.587 * J_modified[:, :, 1] + 0.114 * J_modified[:, :, 2]
+
+    lap = cv2.Laplacian(J_lum, cv2.CV_32F)
+    b = lambda_factor * J_mod_lum - lap
+
+    def A(x):
+        x_reshaped = x.reshape((n, m)).astype(np.float32)
+        lap = cv2.Laplacian(x_reshaped, cv2.CV_32F)
+        return lambda_factor * x - lap.flatten()
+
+    x_blended, _ = cg(LinearOperator((n*m, n*m), matvec=A), b.flatten(), x0=J_lum.flatten())
+    blended_lum = x_blended.reshape((n, m))
+
+    # Adjust RGB by scaling each channel to match new luminance
+    lum_ratio = (blended_lum + 1e-5) / (J_lum + 1e-5)
+    blended = J.copy()
+    for c in range(3):
+        blended[:, :, c] *= lum_ratio
+
+    return np.clip(blended, 0, 255).astype(np.uint8)
+
 
 def local_screened_poisson(image, modified_patch, patch_coords, blend_patch_size):
     """
@@ -441,3 +546,231 @@ def reconstruct(downscaled_image, laplacian_higher):
     reconstructed_image = cv2.add(upscaled_image, laplacian_higher)
 
     return reconstructed_image
+
+from collections import deque
+
+def bfs_patchmatch_recursive_layered(x0, y0, J_padded, R, patch_size, off_field, image_layers, max_depth=999):
+    visited = np.zeros(R.shape, dtype=bool)
+    queue = deque()
+    queue.append((x0, y0, 0))
+    radius = patch_size // 2
+    H, W = R.shape
+
+    def get_flat_layer_index(x, y, patch_size):
+        return (x % patch_size) + patch_size * (y % patch_size)
+
+    def vote_patch(searched_patches_map, patch, x, y):
+        r = patch.shape[0] // 2
+        region = searched_patches_map[x - r:x + r + 1, y - r:y + r + 1]
+        n = region[:, :, 3:4] + 1
+        region[:, :, :3] = (region[:, :, :3] * region[:, :, 3:4] + patch) / n
+        region[:, :, 3:4] = n
+
+    while queue:
+        x, y, depth = queue.popleft()
+
+        if depth > max_depth or visited[x, y]:
+            continue
+        visited[x, y] = True
+
+        bm_x, bm_y = (x, y) + off_field[x, y, :2].astype(np.int32)
+        best_patch = J_padded[bm_x:bm_x+patch_size, bm_y:bm_y+patch_size]
+
+        layer_id = get_flat_layer_index(x, y, patch_size)
+        vote_patch(image_layers[layer_id], best_patch, x, y)
+
+        for dx, dy in [(-patch_size, 0), (patch_size, 0), (0, -patch_size), (0, patch_size)]:
+            nx, ny = x + dx, y + dy
+            if radius <= nx < H - radius and radius <= ny < W - radius:
+                queue.append((nx, ny, depth + 1))
+
+
+def merge_layers(image_layers):
+    H, W, _ = image_layers[0].shape
+    final = np.zeros((H, W, 3), dtype=np.float32)
+    weight = np.zeros((H, W, 1), dtype=np.float32)
+
+    for layer in image_layers:
+        final += layer[:, :, :3]
+        weight += layer[:, :, 3:4]
+
+    final = final / np.maximum(weight, 1e-5)
+    return final, weight
+
+
+def minimize_J_global_poisson_bfs(J, R, d_positive, d_negative, d_pos_mask, d_neg_mask, patch_size=7, lambda_factor=0.5):
+    """
+    Recursive BFS PatchMatch + layered voting + screened Poisson blending.
+    Operates entirely in Lab space (no RGB conversion).
+    Applies interior border fix, full padded edge overwrite, and vote fallback.
+
+    Args:
+        J: Input Lab image (HxWx3)
+        R: Binary region mask
+        d_positive: Coordinates in D+
+        d_negative: Coordinates in D-
+        d_pos_mask: Binary mask of D+
+        d_neg_mask: Binary mask of D-
+        patch_size: Patch size (odd)
+        lambda_factor: Poisson blending strength
+
+    Returns:
+        result: Final Lab image (unpadded), dtype=uint8
+        vote_weights: Confidence map of voted pixels
+    """
+    width, height, _ = J.shape
+    radius = patch_size // 2
+
+    print("  - Padding image...")
+    J_paded = np.stack([np.pad(J[:, :, i], radius, mode="reflect") for i in range(3)]).transpose(1, 2, 0)
+
+    print("  - Generating offset field...")
+    off_field = generate_random_offset_field(R, J_paded, patch_size, d_positive, d_negative, d_pos_mask, d_neg_mask)
+
+    print("  - Search step...")
+    off_field = minimize_off_field_dist(off_field, J_paded, R, patch_size, d_positive, d_negative, d_pos_mask, d_neg_mask)
+
+    print("  - BFS PatchMatch voting...")
+    image_layers = [np.zeros((J_paded.shape[0], J_paded.shape[1], 4), dtype=np.float32) for _ in range(patch_size ** 2)]
+    center_x, center_y = height // 2, width // 2
+    bfs_patchmatch_recursive_layered(center_x, center_y, J_paded, R, patch_size, off_field, image_layers)
+
+    print("  - Merging layers...")
+    J_patched_padded, vote_weights = merge_layers(image_layers)
+
+    print("  - Fixing interior borders in Lab space...")
+    border = patch_size // 2 + 1
+    lab_central = J_patched_padded[radius:-radius, radius:-radius]
+    lab_original = J[radius:-radius, radius:-radius].copy()
+
+    H_fix = min(lab_central.shape[0], lab_original.shape[0])
+    W_fix = min(lab_central.shape[1], lab_original.shape[1])
+    lab_central[:border, :W_fix] = lab_original[:border, :W_fix]
+    lab_central[-border:, :W_fix] = lab_original[-border:, :W_fix]
+    lab_central[:H_fix, :border] = lab_original[:H_fix, :border]
+    lab_central[:H_fix, -border:] = lab_original[:H_fix, -border:]
+    J_patched_padded[radius:-radius, radius:-radius] = lab_central
+
+    print("  - Overwriting padded border ring with original Lab...")
+    J_patched_padded[:radius, :] = J_paded[:radius, :]
+    J_patched_padded[-radius:, :] = J_paded[-radius:, :]
+    J_patched_padded[:, :radius] = J_paded[:, :radius]
+    J_patched_padded[:, -radius:] = J_paded[:, -radius:]
+
+    print("  - Replacing low-confidence votes with original Lab...")
+    if vote_weights.ndim == 2:
+        vote_mask = vote_weights > 1e-3
+    else:
+        vote_mask = vote_weights[:, :, 0] > 1e-3
+
+    vote_mask_3c = np.expand_dims(vote_mask, axis=2)  # (H, W, 1)
+    vote_mask_3c = np.tile(vote_mask_3c, (1, 1, 3))   # (H, W, 3)
+    J_patched_padded = np.where(vote_mask_3c, J_patched_padded, J_paded)
+
+    print("  - Screened Poisson blending...")
+    J_patched_padded = screen_poisson(J_paded, J_patched_padded, lambda_factor=lambda_factor)
+
+    print("  - Finalizing result...")
+    result = np.floor(J_patched_padded[radius:-radius, radius:-radius]).astype(np.uint8)
+    return result, vote_weights
+
+def screen_poisson_brightness(J, J_modified, lambda_factor):
+    """
+    Poisson blending only on grayscale brightness (mean RGB channel), preserving color.
+    """
+    J = J.astype(np.float32)
+    J_modified = J_modified.astype(np.float32)
+    n, m, _ = J.shape
+
+    J_gray = np.mean(J, axis=2)
+    J_mod_gray = np.mean(J_modified, axis=2)
+
+    lap = cv2.Laplacian(J_gray, cv2.CV_32F)
+    b = lambda_factor * J_mod_gray - lap
+
+    def A(x):
+        x_reshaped = x.reshape((n, m)).astype(np.float32)
+        lap = cv2.Laplacian(x_reshaped, cv2.CV_32F)
+        return lambda_factor * x - lap.flatten()
+
+    x_blended, _ = cg(LinearOperator((n*m, n*m), matvec=A), b.flatten(), x0=J_gray.flatten())
+    blended_gray = x_blended.reshape((n, m))
+
+    # Merge new gray channel into original RGB by matching mean
+    blended = J.copy()
+    gray_ratio = (blended_gray + 1e-5) / (np.mean(J, axis=2) + 1e-5)
+    for c in range(3):
+        blended[:, :, c] *= gray_ratio
+
+    return np.clip(blended, 0, 255).astype(np.uint8)
+
+def screen_poisson_luminance(J, J_modified, lambda_factor):
+    """
+    Poisson blending only on perceptual luminance (Y from YUV), preserving color.
+    """
+    J = J.astype(np.float32)
+    J_modified = J_modified.astype(np.float32)
+    n, m, _ = J.shape
+
+    # Y = 0.299R + 0.587G + 0.114B
+    # J_lum = 0.299 * J[:, :, 0] + 0.587 * J[:, :, 1] + 0.114 * J[:, :, 2]
+    # J_mod_lum = 0.299 * J_modified[:, :, 0] + 0.587 * J_modified[:, :, 1] + 0.114 * J_modified[:, :, 2]
+    J_lum = J[:,:,0]
+    J_mod_lum = J_modified[:,:,0]
+
+    lap = cv2.Laplacian(J_lum, cv2.CV_32F)
+    b = lambda_factor * J_mod_lum - lap
+
+    def A(x):
+        x_reshaped = x.reshape((n, m)).astype(np.float32)
+        lap = cv2.Laplacian(x_reshaped, cv2.CV_32F)
+        return lambda_factor * x - lap.flatten()
+
+    x_blended, _ = cg(LinearOperator((n*m, n*m), matvec=A), b.flatten(), x0=J_lum.flatten())
+    blended_lum = x_blended.reshape((n, m))
+
+    # Adjust RGB by scaling each channel to match new luminance
+    lum_ratio = (blended_lum + 1e-5) / (J_lum + 1e-5)
+    blended = J.copy()
+    for c in range(3):
+        blended[:, :, c] *= lum_ratio
+
+    return np.clip(blended, 0, 255).astype(np.uint8)
+
+def adaptive_tau_initialization(s_map, mask, boost_factor=0.2):
+    """
+    Initializes tau_positive and tau_negative to favor small salient regions.
+    
+    Args:
+        s_map: (H, W) saliency map, float32 or float64
+        mask: (H, W) binary mask, uint8 or bool
+        boost_factor: amount to amplify the contrast when foreground is small (e.g., 0.2)
+
+    Returns:
+        tau_positive, tau_negative
+    """
+    # Normalize saliency map if needed
+    s_map = (s_map - s_map.min()) / (s_map.max() - s_map.min() + 1e-8)
+
+    saliency_fg = s_map[mask > 0]
+    saliency_bg = s_map[mask == 0]
+
+    mean_fg = np.mean(saliency_fg)
+    mean_bg = np.mean(saliency_bg)
+
+    # Mask coverage ratio
+    mask_ratio = np.sum(mask > 0) / mask.size
+
+    # Contrast-driven adjustment
+    contrast = mean_fg - mean_bg
+    bias = (1 - mask_ratio) * boost_factor * np.sign(contrast)
+
+    # Base taus at 70th/30th percentiles
+    base_tau_pos = np.quantile(saliency_fg, 0.7)
+    base_tau_neg = np.quantile(saliency_bg, 0.3)
+
+    # Apply bias
+    tau_positive = np.clip(base_tau_pos + bias, 0, 1)
+    tau_negative = np.clip(base_tau_neg - bias, 0, 1)
+
+    return tau_positive, tau_negative

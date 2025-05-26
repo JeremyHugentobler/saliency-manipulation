@@ -4,6 +4,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2, skimage, os, sys
+from PIL import Image
 
 # Local imports
 from src import saliancy_map as sm
@@ -24,13 +25,13 @@ EPSILON = 1e-4
 ############################
 #    Modular Definitions   # 
 ############################
-compute_saliency_map = sm.opencv_saliency
+compute_saliency_map = sm.custom_saliency
 minimize_J = opt.minimize_J_global_poisson
 compute_database = db.compute_location_database
 
 
 
-def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=3, learning_rate=0.1, convert=True):
+def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7, learning_rate=0.2, convert=True):
     """
     This is the main function that will implement the saliency manipulation algorithm
     as described in the paper. The input image will see its region of interest R defined by
@@ -52,8 +53,8 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=3,
     ################################
 
     # Initialize tau +/-
-    tau_positive = 0
-    tau_negative = 1
+    tau_positive = 0.5
+    tau_negative = 0.5
 
     print("\ninitalizing variables")
 
@@ -66,10 +67,11 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=3,
     S_J = compute_saliency_map(J[0])
     print(" - Done.")
 
-    # Erode the mask so that only patches within are modified
-    radius = patch_size // 2
-    kernel = np.ones((radius, radius))
-    mask_image = cv2.erode(R, kernel)
+    s_maps = [S_J.copy()]
+    saliency_contrast = []
+    images = [input_image.copy()]
+
+    input_image_Lab = cv2.cvtColor(input_image, cv2.COLOR_RGB2Lab)
 
     # Initialize the Database I_D +/-
     # I_D_positive, I_D_negative = [np.zeros_like(input_image) for _ in range(2)]
@@ -102,7 +104,7 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=3,
         if convert:
             J[0] = cv2.cvtColor(J[0], cv2.COLOR_RGB2Lab)
 
-        J[1] = minimize_J(J[0], mask_image, D_positive, D_negative, D_pos_mask, D_neg_mask, patch_size)
+        J[1] = minimize_J(J[0], input_image_Lab, mask_image, D_positive, D_negative, D_pos_mask, D_neg_mask, patch_size)
         print(" - Done.")
 
         # Convert back into RGB
@@ -113,10 +115,15 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=3,
         # Compute new saliency map
         print(" - computing new saliency map...")
         S_J = compute_saliency_map(J[1])
+        s_maps.append(S_J.copy())
         print(" - Done.")
+
+        s_diff = S_J - s_maps[-2]
+        utils.display_images([J[0], J[1],S_J,s_diff])
 
         # Compute criterions
         criterion = compute_criterion(S_J, R, delta_s)
+        saliency_contrast.append(phi(S_J, R))
         print(" - Iteration's saliency contrast:", phi(S_J, R), "Objective:", delta_s)
 
         # Check if convergence is reached by tau's
@@ -126,25 +133,23 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=3,
             break
         
         # Check if convergence is reached by delta_s
-        if criterion < EPSILON:
+        if criterion < EPSILON or phi(S_J, R) > delta_s:
             print(" - Criterion convergence reached.")
             break
 
         # Update tau +/-
         tau_positive, tau_negative = update_taus(tau_positive, tau_negative, criterion, learning_rate)
 
+        images.append(J[1].copy())
         # switch the buffers (only affect the references so no copy is made)
         temp = J[0].copy()
         J[0] = J[1]
         J[1] = temp
 
-
-        # print("\033[A\033[K\033[A\033[K\033[A\033[K\033[A\033[K\033[A\033[K\033[A\033[K\033[A\033[K", end="")
-
     print("Done")
-    return J[0], tau_positive, tau_negative
+    return images, s_maps, tau_positive, tau_negative, saliency_contrast
 
-def image_update_only(input_image, R, iterations, tau_positive, tau_negative, patch_size=7):
+def image_update_only(input_image, original_img, R, iterations, tau_positive, tau_negative, patch_size=7):
     """Called for image at finer scales, it's basically only the second part of 'manipulate_saliency' and refered as 'image update' in the paper.
 
     Args:
@@ -156,24 +161,37 @@ def image_update_only(input_image, R, iterations, tau_positive, tau_negative, pa
         patch_size (int, optional): The patch size. Defaults to 7.
     """    
     
+    # buffers
+    images = []
+    s_maps = []
+
     # Input in RGB, transform to Lab
     image = input_image.copy()
+    original_img_lab = cv2.cvtColor(original_img, cv2.COLOR_RGB2Lab)
+
+    saliency_contrast = []
         
     for i in range(iterations):
         
         # Get the saliency map
         s_map = compute_saliency_map(image)
+        s_maps.append(s_map.copy())
+        saliency_contrast.append(phi(s_map, R))
+
         # Get the databases
         D_positive, D_negative, D_pos_mask, D_neg_mask = compute_database(tau_positive, tau_negative, image, s_map)
         
         # Convert in Lab
         image = cv2.cvtColor(image, cv2.COLOR_RGB2Lab)
         # Compute the image update
-        image = minimize_J(image, R, D_positive, D_negative, D_pos_mask, D_neg_mask, patch_size)
+        image = minimize_J(image, original_img_lab, R, D_positive, D_negative, D_pos_mask, D_neg_mask, patch_size)
+
         # Convert back in RGB
         image = cv2.cvtColor(image, cv2.COLOR_Lab2RGB)
 
-    return image
+        images.append(image.copy())
+
+    return images, s_maps, saliency_contrast
 
 def phi(S_J, R):
     """
@@ -231,6 +249,9 @@ def update_taus(tau_positive, tau_negative, criterion, learning_rate):
     tau_positive += adjustment
     tau_negative -= adjustment
 
+    tau_positive = min(tau_positive, 0.9)  # Ensure tau_positive is not too small
+    tau_negative = max(tau_negative, 0.1)  # Ensure tau_negative is not too small
+
     return tau_positive, tau_negative
         
 
@@ -261,8 +282,10 @@ if __name__ == "__main__":
     # Read Mask    
     mask_image = cv2.imread(mask_path)
     mask_image = cv2.cvtColor(mask_image, cv2.COLOR_BGR2GRAY)
+
+    h, w = input_image.shape[:2]
     
-    mask_image = cv2.resize(mask_image, (input_image.shape[1], input_image.shape[0]), interpolation=cv2.INTER_NEAREST)
+    mask_image = cv2.resize(mask_image, (w, h), interpolation=cv2.INTER_NEAREST)
     assert input_image.shape[:2] == mask_image.shape[:2], "Image and mask must match in size"
 
     # Compute the pyramids
@@ -277,11 +300,23 @@ if __name__ == "__main__":
     _, mask_image = cv2.threshold(mask_image, 127, 255, cv2.THRESH_BINARY)
     mask_image[mask_image > 0] = 1
 
+    # Buffers
+    saliency_contrast = []
+    s_maps = []
+    images = []
+
     # Starting with the coarsest image
     utils.header_print("\nRunning the algorithm on the coarsest image...")
     
-    coarse_image, tau_positive, tau_negative = manipulate_saliency(img, mask_image, delta_s, max_iteration=10)
-    utils.display_image(coarse_image, pyramids[-1])
+    coarse_images, coarse_s_maps, tau_positive, tau_negative, saliency = manipulate_saliency(img, mask_image, delta_s, max_iteration=8)
+    coarse_image = coarse_images[-1].copy()
+
+    # Save info
+    images.extend(coarse_images)
+    s_maps.extend(coarse_s_maps)
+    saliency_contrast.extend(saliency)
+
+    original_img = pyramids[-1].copy()
     pyramids[-1] = coarse_image
     
     # Now, we use those tau + and tau - to run the algorithm on the images at finer scales without having to compute them again
@@ -289,11 +324,16 @@ if __name__ == "__main__":
     utils.header_print("\nRunning the algorithm on the finer images...")
     
     for i in range(n):
+        # more iteration at the beginning then at the end
+        nb_of_iterations = ((n - i))**2
+
         # We take the image at one scale finer and get it back to the original size
         img = pyramids[n - i]
         lap = laplacian[n - 1 - i]
         # print the sizes
         reconstruced = reconstruct(img, lap)
+        og_reconsructed = reconstruct(original_img, lap)
+        utils.display_images([og_reconsructed, reconstruced, s_maps[-1]], ["Original", "Reconstructed", "Saliency Map"])
         mask_image = mask_pyramids[n - i - 1]
 
         # Rebinearize the mask
@@ -301,22 +341,56 @@ if __name__ == "__main__":
         mask_image[mask_image > 0] = 1
                 
         # We call the image update function
-        img = image_update_only(reconstruced, mask_image, 2, tau_positive, tau_negative)
-        
+        iter_imgs, iter_s_maps, saliency = image_update_only(reconstruced, og_reconsructed, mask_image, nb_of_iterations, tau_positive, tau_negative)
+        img = iter_imgs[-1].copy()
+
+        # store infos
+        saliency_contrast.extend(saliency)
+        images.extend(iter_imgs)
+        s_maps.extend(iter_s_maps)
+
         # We put the image back in the pyramid
+        original_img = pyramids[n - 1 - i].copy()
         pyramids[n - 1 - i] = img
         # display the image at this scale
-        plt.figure(figsize=(10,10))
-        plt.imshow(img)
-        plt.axis('off')
-        plt.show()
+        # plt.figure(figsize=(10,10))
+        # plt.imshow(img)
+        # plt.axis('off')
+        # plt.show()
     
+    # Save animations
+    images = [cv2.resize(img, (w, h), interpolation=cv2.INTER_LINEAR) for img in images]
+    s_maps = [cv2.resize(s_map, (w, h), interpolation=cv2.INTER_LINEAR) for s_map in s_maps]
+
+    images = [Image.fromarray(img) for img in images]
+    s_maps = [Image.fromarray((s_map * 255).astype(np.uint8)) for s_map in s_maps]
+
+    s_maps[0].save(
+        './output/saliency_animation.gif',
+        save_all=True,
+        append_images=s_maps[1:],
+        duration=200,
+        loop=0
+    )
+    
+    images[0].save(
+        './output/animation.gif',
+        save_all=True,
+        append_images=images[1:],
+        duration=200,
+        loop=0
+    )
+
     
     utils.display_images(pyramids)
     final_image = img
     
     # Display the original image and the saliency map
-    utils.display_images([input_image, final_image, mask_image], ["intput", "modified", "mask"])
+    input_s_map = compute_saliency_map(input_image)
+    utils.display_images([input_image, final_image, mask_image, input_s_map, s_maps[-1]], ["intput", "modified", "mask", "input saliency map", "final saliency map"])
+
+    plt.plot(saliency_contrast)
+    plt.title("Saliency contrast over iterations")
     # save the orinal image
     # save_image(image, folder_path + "original_image.jpg")
 
