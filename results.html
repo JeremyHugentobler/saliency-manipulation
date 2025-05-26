@@ -1,0 +1,767 @@
+<html><head><title>Saliency Shift Benchmark</title></head><body>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        img {
+            max-width: 100%;
+            height: auto;
+            margin: 10px 0;
+        }
+        .image-row {
+            display: flex;
+            flex-direction: row;
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            margin-bottom: 30px;
+            background-color: #fff;
+            border-radius: 0 0 5px 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            padding: 15px;
+        }
+        .image-reference {
+            display: flex;
+            flex-direction: row;
+            justify-content: center;
+            align-items: center;
+            overflow-x: auto;
+            flex-wrap: nowrap;
+            background-color: #fff;
+            border-radius: 5px 5px 0 0;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            padding: 15px;
+        }
+        .image-container {
+            flex: 0 0 auto;
+            margin: 10px;
+            padding: 10px;
+            text-align: center;
+            min-width: 250px;
+        }
+        .image-container img {
+            max-width: 70%;
+            height: auto;
+            max-height: 300px; /* Limit height for consistency */
+        }
+        .image-container h3 {
+            font-size: 1em;
+            margin: 10px 0;
+            color: #333;
+        }
+        .image-title {
+            width: 100%;
+            text-align: left;
+            margin-bottom: 10px;
+            padding-left: 20px;
+        }
+    </style>
+    <h1>Saliency Results Comparison</h1>
+        <h2 class="image-title">Image Set: 001</h2>
+        <div class="image-reference">
+            <div class="image-container">
+                <h3>Original Image</h3>
+                <img src="data\saliency_shift\001_in.jpg" alt="Original image">
+            </div>
+            <div class="image-container">
+                <h3>Mask</h3>
+                <img src="data\saliency_shift\masks\001_mask.jpg" alt="Mask image">
+            </div>
+        </div>
+        <div class="image-row">
+            <div class="image-container">
+                <h3>Our implementation</h3>
+                <img src="data\saliency_shift\001_ours.jpg" alt="Ours image">
+            </div> 
+            <div class="image-container">
+                <h3>Paper implementation</h3>
+                <img src="data\saliency_shift\001_out.jpg" alt="Paper image">
+            </div>
+        
+        
+                <div class="image-container">
+                    <h3>hag</h3>
+                    <img src="data\saliency_shift\001_hag.jpg" alt="001_hag">
+                </div>
+                
+                <div class="image-container">
+                    <h3>hor</h3>
+                    <img src="data\saliency_shift\001_hor.jpg" alt="001_hor">
+                </div>
+                
+                <div class="image-container">
+                    <h3>wong</h3>
+                    <img src="data\saliency_shift\001_wong.jpg" alt="001_wong">
+                </div>
+                </div>
+        <h2 class="image-title">Image Set: 002</h2>
+        <div class="image-reference">
+            <div class="image-container">
+                <h3>Original Image</h3>
+                <img src="data\saliency_shift\002_in.jpg" alt="Original image">
+            </div>
+            <div class="image-container">
+                <h3>Mask</h3>
+                <img src="data\saliency_shift\masks\002_mask.jpg" alt="Mask image">
+            </div>
+        </div>
+        <div class="image-row">
+            <div class="image-container">
+                <h3>Our implementation</h3>
+                <img src="data\saliency_shift\002_ours.jpg" alt="Ours image">
+            </div> 
+            <div class="image-container">
+                <h3>Paper implementation</h3>
+                <img src="data\saliency_shift\002_out.jpg" alt="Paper image">
+            </div>
+        
+        
+                <div class="image-container">
+                    <h3>hag</h3>
+                    <img src="data\saliency_shift\002_hag.jpg" alt="002_hag">
+                </div>
+                
+                <div class="image-container">
+                    <h3>hor</h3>
+                    <img src="data\saliency_shift\002_hor.jpg" alt="002_hor">
+                </div>
+                
+                <div class="image-container">
+                    <h3>wong</h3>
+                    <img src="data\saliency_shift\002_wong.jpg" alt="002_wong">
+                </div>
+                </div>
+        <h2 class="image-title">Image Set: 003</h2>
+        <div class="image-reference">
+            <div class="image-container">
+                <h3>Original Image</h3>
+                <img src="data\saliency_shift\003_in.jpg" alt="Original image">
+            </div>
+            <div class="image-container">
+                <h3>Mask</h3>
+                <img src="data\saliency_shift\masks\003_mask.jpg" alt="Mask image">
+            </div>
+        </div>
+        <div class="image-row">
+            <div class="image-container">
+                <h3>Our implementation</h3>
+                <img src="data\saliency_shift\003_ours.jpg" alt="Ours image">
+            </div> 
+            <div class="image-container">
+                <h3>Paper implementation</h3>
+                <img src="data\saliency_shift\003_out.jpg" alt="Paper image">
+            </div>
+        
+        
+                <div class="image-container">
+                    <h3>hag</h3>
+                    <img src="data\saliency_shift\003_hag.jpg" alt="003_hag">
+                </div>
+                
+                <div class="image-container">
+                    <h3>hor</h3>
+                    <img src="data\saliency_shift\003_hor.jpg" alt="003_hor">
+                </div>
+                
+                <div class="image-container">
+                    <h3>wong</h3>
+                    <img src="data\saliency_shift\003_wong.jpg" alt="003_wong">
+                </div>
+                </div>
+        <h2 class="image-title">Image Set: 004</h2>
+        <div class="image-reference">
+            <div class="image-container">
+                <h3>Original Image</h3>
+                <img src="data\saliency_shift\004_in.jpg" alt="Original image">
+            </div>
+            <div class="image-container">
+                <h3>Mask</h3>
+                <img src="data\saliency_shift\masks\004_mask.jpg" alt="Mask image">
+            </div>
+        </div>
+        <div class="image-row">
+            <div class="image-container">
+                <h3>Our implementation</h3>
+                <img src="data\saliency_shift\004_ours.jpg" alt="Ours image">
+            </div> 
+            <div class="image-container">
+                <h3>Paper implementation</h3>
+                <img src="data\saliency_shift\004_out.jpg" alt="Paper image">
+            </div>
+        
+        
+                <div class="image-container">
+                    <h3>hag</h3>
+                    <img src="data\saliency_shift\004_hag.jpg" alt="004_hag">
+                </div>
+                
+                <div class="image-container">
+                    <h3>hor</h3>
+                    <img src="data\saliency_shift\004_hor.jpg" alt="004_hor">
+                </div>
+                
+                <div class="image-container">
+                    <h3>wong</h3>
+                    <img src="data\saliency_shift\004_wong.jpg" alt="004_wong">
+                </div>
+                </div>
+        <h2 class="image-title">Image Set: 005</h2>
+        <div class="image-reference">
+            <div class="image-container">
+                <h3>Original Image</h3>
+                <img src="data\saliency_shift\005_in.jpg" alt="Original image">
+            </div>
+            <div class="image-container">
+                <h3>Mask</h3>
+                <img src="data\saliency_shift\masks\005_mask.jpg" alt="Mask image">
+            </div>
+        </div>
+        <div class="image-row">
+            <div class="image-container">
+                <h3>Our implementation</h3>
+                <img src="data\saliency_shift\005_ours.jpg" alt="Ours image">
+            </div> 
+            <div class="image-container">
+                <h3>Paper implementation</h3>
+                <img src="data\saliency_shift\005_out.jpg" alt="Paper image">
+            </div>
+        
+        
+                <div class="image-container">
+                    <h3>hag</h3>
+                    <img src="data\saliency_shift\005_hag.jpg" alt="005_hag">
+                </div>
+                
+                <div class="image-container">
+                    <h3>hor</h3>
+                    <img src="data\saliency_shift\005_hor.jpg" alt="005_hor">
+                </div>
+                
+                <div class="image-container">
+                    <h3>wong</h3>
+                    <img src="data\saliency_shift\005_wong.jpg" alt="005_wong">
+                </div>
+                </div>
+        <h2 class="image-title">Image Set: 006</h2>
+        <div class="image-reference">
+            <div class="image-container">
+                <h3>Original Image</h3>
+                <img src="data\saliency_shift\006_in.jpg" alt="Original image">
+            </div>
+            <div class="image-container">
+                <h3>Mask</h3>
+                <img src="data\saliency_shift\masks\006_mask.jpg" alt="Mask image">
+            </div>
+        </div>
+        <div class="image-row">
+            <div class="image-container">
+                <h3>Our implementation</h3>
+                <img src="data\saliency_shift\006_ours.jpg" alt="Ours image">
+            </div> 
+            <div class="image-container">
+                <h3>Paper implementation</h3>
+                <img src="data\saliency_shift\006_out.jpg" alt="Paper image">
+            </div>
+        
+        
+                <div class="image-container">
+                    <h3>hag</h3>
+                    <img src="data\saliency_shift\006_hag.jpg" alt="006_hag">
+                </div>
+                
+                <div class="image-container">
+                    <h3>hor</h3>
+                    <img src="data\saliency_shift\006_hor.jpg" alt="006_hor">
+                </div>
+                
+                <div class="image-container">
+                    <h3>wong</h3>
+                    <img src="data\saliency_shift\006_wong.jpg" alt="006_wong">
+                </div>
+                </div>
+        <h2 class="image-title">Image Set: 007</h2>
+        <div class="image-reference">
+            <div class="image-container">
+                <h3>Original Image</h3>
+                <img src="data\saliency_shift\007_in.jpg" alt="Original image">
+            </div>
+            <div class="image-container">
+                <h3>Mask</h3>
+                <img src="data\saliency_shift\masks\007_mask.jpg" alt="Mask image">
+            </div>
+        </div>
+        <div class="image-row">
+            <div class="image-container">
+                <h3>Our implementation</h3>
+                <img src="data\saliency_shift\007_ours.jpg" alt="Ours image">
+            </div> 
+            <div class="image-container">
+                <h3>Paper implementation</h3>
+                <img src="data\saliency_shift\007_out.jpg" alt="Paper image">
+            </div>
+        
+        
+                <div class="image-container">
+                    <h3>hag</h3>
+                    <img src="data\saliency_shift\007_hag.jpg" alt="007_hag">
+                </div>
+                
+                <div class="image-container">
+                    <h3>hor</h3>
+                    <img src="data\saliency_shift\007_hor.jpg" alt="007_hor">
+                </div>
+                
+                <div class="image-container">
+                    <h3>wong</h3>
+                    <img src="data\saliency_shift\007_wong.jpg" alt="007_wong">
+                </div>
+                </div>
+        <h2 class="image-title">Image Set: 008</h2>
+        <div class="image-reference">
+            <div class="image-container">
+                <h3>Original Image</h3>
+                <img src="data\saliency_shift\008_in.jpg" alt="Original image">
+            </div>
+            <div class="image-container">
+                <h3>Mask</h3>
+                <img src="data\saliency_shift\masks\008_mask.jpg" alt="Mask image">
+            </div>
+        </div>
+        <div class="image-row">
+            <div class="image-container">
+                <h3>Our implementation</h3>
+                <img src="data\saliency_shift\008_ours.jpg" alt="Ours image">
+            </div> 
+            <div class="image-container">
+                <h3>Paper implementation</h3>
+                <img src="data\saliency_shift\008_out.jpg" alt="Paper image">
+            </div>
+        
+        
+                <div class="image-container">
+                    <h3>hag</h3>
+                    <img src="data\saliency_shift\008_hag.jpg" alt="008_hag">
+                </div>
+                
+                <div class="image-container">
+                    <h3>hor</h3>
+                    <img src="data\saliency_shift\008_hor.jpg" alt="008_hor">
+                </div>
+                
+                <div class="image-container">
+                    <h3>wong</h3>
+                    <img src="data\saliency_shift\008_wong.jpg" alt="008_wong">
+                </div>
+                </div>
+        <h2 class="image-title">Image Set: 009</h2>
+        <div class="image-reference">
+            <div class="image-container">
+                <h3>Original Image</h3>
+                <img src="data\saliency_shift\009_in.jpg" alt="Original image">
+            </div>
+            <div class="image-container">
+                <h3>Mask</h3>
+                <img src="data\saliency_shift\masks\009_mask.jpg" alt="Mask image">
+            </div>
+        </div>
+        <div class="image-row">
+            <div class="image-container">
+                <h3>Our implementation</h3>
+                <img src="data\saliency_shift\009_ours.jpg" alt="Ours image">
+            </div> 
+            <div class="image-container">
+                <h3>Paper implementation</h3>
+                <img src="data\saliency_shift\009_out.jpg" alt="Paper image">
+            </div>
+        
+        
+                <div class="image-container">
+                    <h3>hag</h3>
+                    <img src="data\saliency_shift\009_hag.jpg" alt="009_hag">
+                </div>
+                
+                <div class="image-container">
+                    <h3>hor</h3>
+                    <img src="data\saliency_shift\009_hor.jpg" alt="009_hor">
+                </div>
+                
+                <div class="image-container">
+                    <h3>wong</h3>
+                    <img src="data\saliency_shift\009_wong.jpg" alt="009_wong">
+                </div>
+                </div>
+        <h2 class="image-title">Image Set: 010</h2>
+        <div class="image-reference">
+            <div class="image-container">
+                <h3>Original Image</h3>
+                <img src="data\saliency_shift\010_in.jpg" alt="Original image">
+            </div>
+            <div class="image-container">
+                <h3>Mask</h3>
+                <img src="data\saliency_shift\masks\010_mask.jpg" alt="Mask image">
+            </div>
+        </div>
+        <div class="image-row">
+            <div class="image-container">
+                <h3>Our implementation</h3>
+                <img src="data\saliency_shift\010_ours.jpg" alt="Ours image">
+            </div> 
+            <div class="image-container">
+                <h3>Paper implementation</h3>
+                <img src="data\saliency_shift\010_out.jpg" alt="Paper image">
+            </div>
+        
+        
+                <div class="image-container">
+                    <h3>hag</h3>
+                    <img src="data\saliency_shift\010_hag.jpg" alt="010_hag">
+                </div>
+                
+                <div class="image-container">
+                    <h3>hor</h3>
+                    <img src="data\saliency_shift\010_hor.jpg" alt="010_hor">
+                </div>
+                
+                <div class="image-container">
+                    <h3>wong</h3>
+                    <img src="data\saliency_shift\010_wong.jpg" alt="010_wong">
+                </div>
+                </div>
+        <h2 class="image-title">Image Set: 011</h2>
+        <div class="image-reference">
+            <div class="image-container">
+                <h3>Original Image</h3>
+                <img src="data\saliency_shift\011_in.jpg" alt="Original image">
+            </div>
+            <div class="image-container">
+                <h3>Mask</h3>
+                <img src="data\saliency_shift\masks\011_mask.jpg" alt="Mask image">
+            </div>
+        </div>
+        <div class="image-row">
+            <div class="image-container">
+                <h3>Our implementation</h3>
+                <img src="data\saliency_shift\011_ours.jpg" alt="Ours image">
+            </div> 
+            <div class="image-container">
+                <h3>Paper implementation</h3>
+                <img src="data\saliency_shift\011_out.jpg" alt="Paper image">
+            </div>
+        
+        
+                <div class="image-container">
+                    <h3>hag</h3>
+                    <img src="data\saliency_shift\011_hag.jpg" alt="011_hag">
+                </div>
+                
+                <div class="image-container">
+                    <h3>hor</h3>
+                    <img src="data\saliency_shift\011_hor.jpg" alt="011_hor">
+                </div>
+                
+                <div class="image-container">
+                    <h3>wong</h3>
+                    <img src="data\saliency_shift\011_wong.jpg" alt="011_wong">
+                </div>
+                </div>
+        <h2 class="image-title">Image Set: 012</h2>
+        <div class="image-reference">
+            <div class="image-container">
+                <h3>Original Image</h3>
+                <img src="data\saliency_shift\012_in.jpg" alt="Original image">
+            </div>
+            <div class="image-container">
+                <h3>Mask</h3>
+                <img src="data\saliency_shift\masks\012_mask.jpg" alt="Mask image">
+            </div>
+        </div>
+        <div class="image-row">
+            <div class="image-container">
+                <h3>Our implementation</h3>
+                <img src="data\saliency_shift\012_ours.jpg" alt="Ours image">
+            </div> 
+            <div class="image-container">
+                <h3>Paper implementation</h3>
+                <img src="data\saliency_shift\012_out.jpg" alt="Paper image">
+            </div>
+        
+        
+                <div class="image-container">
+                    <h3>hag</h3>
+                    <img src="data\saliency_shift\012_hag.jpg" alt="012_hag">
+                </div>
+                
+                <div class="image-container">
+                    <h3>hor</h3>
+                    <img src="data\saliency_shift\012_hor.jpg" alt="012_hor">
+                </div>
+                
+                <div class="image-container">
+                    <h3>wong</h3>
+                    <img src="data\saliency_shift\012_wong.jpg" alt="012_wong">
+                </div>
+                </div>
+        <h2 class="image-title">Image Set: 013</h2>
+        <div class="image-reference">
+            <div class="image-container">
+                <h3>Original Image</h3>
+                <img src="data\saliency_shift\013_in.jpg" alt="Original image">
+            </div>
+            <div class="image-container">
+                <h3>Mask</h3>
+                <img src="data\saliency_shift\masks\013_mask.jpg" alt="Mask image">
+            </div>
+        </div>
+        <div class="image-row">
+            <div class="image-container">
+                <h3>Our implementation</h3>
+                <img src="data\saliency_shift\013_ours.jpg" alt="Ours image">
+            </div> 
+            <div class="image-container">
+                <h3>Paper implementation</h3>
+                <img src="data\saliency_shift\013_out.jpg" alt="Paper image">
+            </div>
+        
+        
+                <div class="image-container">
+                    <h3>hag</h3>
+                    <img src="data\saliency_shift\013_hag.jpg" alt="013_hag">
+                </div>
+                
+                <div class="image-container">
+                    <h3>hor</h3>
+                    <img src="data\saliency_shift\013_hor.jpg" alt="013_hor">
+                </div>
+                
+                <div class="image-container">
+                    <h3>wong</h3>
+                    <img src="data\saliency_shift\013_wong.jpg" alt="013_wong">
+                </div>
+                </div>
+        <h2 class="image-title">Image Set: 014</h2>
+        <div class="image-reference">
+            <div class="image-container">
+                <h3>Original Image</h3>
+                <img src="data\saliency_shift\014_in.jpg" alt="Original image">
+            </div>
+            <div class="image-container">
+                <h3>Mask</h3>
+                <img src="data\saliency_shift\masks\014_mask.jpg" alt="Mask image">
+            </div>
+        </div>
+        <div class="image-row">
+            <div class="image-container">
+                <h3>Our implementation</h3>
+                <img src="data\saliency_shift\014_ours.jpg" alt="Ours image">
+            </div> 
+            <div class="image-container">
+                <h3>Paper implementation</h3>
+                <img src="data\saliency_shift\014_out.jpg" alt="Paper image">
+            </div>
+        
+        
+                <div class="image-container">
+                    <h3>hag</h3>
+                    <img src="data\saliency_shift\014_hag.jpg" alt="014_hag">
+                </div>
+                
+                <div class="image-container">
+                    <h3>hor</h3>
+                    <img src="data\saliency_shift\014_hor.jpg" alt="014_hor">
+                </div>
+                
+                <div class="image-container">
+                    <h3>wong</h3>
+                    <img src="data\saliency_shift\014_wong.jpg" alt="014_wong">
+                </div>
+                </div>
+        <h2 class="image-title">Image Set: 015</h2>
+        <div class="image-reference">
+            <div class="image-container">
+                <h3>Original Image</h3>
+                <img src="data\saliency_shift\015_in.jpg" alt="Original image">
+            </div>
+            <div class="image-container">
+                <h3>Mask</h3>
+                <img src="data\saliency_shift\masks\015_mask.jpg" alt="Mask image">
+            </div>
+        </div>
+        <div class="image-row">
+            <div class="image-container">
+                <h3>Our implementation</h3>
+                <img src="data\saliency_shift\015_ours.jpg" alt="Ours image">
+            </div> 
+            <div class="image-container">
+                <h3>Paper implementation</h3>
+                <img src="data\saliency_shift\015_out.jpg" alt="Paper image">
+            </div>
+        
+        
+                <div class="image-container">
+                    <h3>hag</h3>
+                    <img src="data\saliency_shift\015_hag.jpg" alt="015_hag">
+                </div>
+                
+                <div class="image-container">
+                    <h3>hor</h3>
+                    <img src="data\saliency_shift\015_hor.jpg" alt="015_hor">
+                </div>
+                
+                <div class="image-container">
+                    <h3>wong</h3>
+                    <img src="data\saliency_shift\015_wong.jpg" alt="015_wong">
+                </div>
+                </div>
+        <h2 class="image-title">Image Set: 016</h2>
+        <div class="image-reference">
+            <div class="image-container">
+                <h3>Original Image</h3>
+                <img src="data\saliency_shift\016_in.jpg" alt="Original image">
+            </div>
+            <div class="image-container">
+                <h3>Mask</h3>
+                <img src="data\saliency_shift\masks\016_mask.jpg" alt="Mask image">
+            </div>
+        </div>
+        <div class="image-row">
+            <div class="image-container">
+                <h3>Our implementation</h3>
+                <img src="data\saliency_shift\016_ours.jpg" alt="Ours image">
+            </div> 
+            <div class="image-container">
+                <h3>Paper implementation</h3>
+                <img src="data\saliency_shift\016_out.jpg" alt="Paper image">
+            </div>
+        
+        
+                <div class="image-container">
+                    <h3>hag</h3>
+                    <img src="data\saliency_shift\016_hag.jpg" alt="016_hag">
+                </div>
+                
+                <div class="image-container">
+                    <h3>hor</h3>
+                    <img src="data\saliency_shift\016_hor.jpg" alt="016_hor">
+                </div>
+                
+                <div class="image-container">
+                    <h3>wong</h3>
+                    <img src="data\saliency_shift\016_wong.jpg" alt="016_wong">
+                </div>
+                </div>
+        <h2 class="image-title">Image Set: 017</h2>
+        <div class="image-reference">
+            <div class="image-container">
+                <h3>Original Image</h3>
+                <img src="data\saliency_shift\017_in.jpg" alt="Original image">
+            </div>
+            <div class="image-container">
+                <h3>Mask</h3>
+                <img src="data\saliency_shift\masks\017_mask.jpg" alt="Mask image">
+            </div>
+        </div>
+        <div class="image-row">
+            <div class="image-container">
+                <h3>Our implementation</h3>
+                <img src="data\saliency_shift\017_ours.jpg" alt="Ours image">
+            </div> 
+            <div class="image-container">
+                <h3>Paper implementation</h3>
+                <img src="data\saliency_shift\017_out.jpg" alt="Paper image">
+            </div>
+        
+        
+                <div class="image-container">
+                    <h3>hag</h3>
+                    <img src="data\saliency_shift\017_hag.jpg" alt="017_hag">
+                </div>
+                
+                <div class="image-container">
+                    <h3>hor</h3>
+                    <img src="data\saliency_shift\017_hor.jpg" alt="017_hor">
+                </div>
+                
+                <div class="image-container">
+                    <h3>wong</h3>
+                    <img src="data\saliency_shift\017_wong.jpg" alt="017_wong">
+                </div>
+                </div>
+        <h2 class="image-title">Image Set: 018</h2>
+        <div class="image-reference">
+            <div class="image-container">
+                <h3>Original Image</h3>
+                <img src="data\saliency_shift\018_in.jpg" alt="Original image">
+            </div>
+            <div class="image-container">
+                <h3>Mask</h3>
+                <img src="data\saliency_shift\masks\018_mask.jpg" alt="Mask image">
+            </div>
+        </div>
+        <div class="image-row">
+            <div class="image-container">
+                <h3>Our implementation</h3>
+                <img src="data\saliency_shift\018_ours.jpg" alt="Ours image">
+            </div> 
+            <div class="image-container">
+                <h3>Paper implementation</h3>
+                <img src="data\saliency_shift\018_out.jpg" alt="Paper image">
+            </div>
+        
+        
+                <div class="image-container">
+                    <h3>hag</h3>
+                    <img src="data\saliency_shift\018_hag.jpg" alt="018_hag">
+                </div>
+                
+                <div class="image-container">
+                    <h3>hor</h3>
+                    <img src="data\saliency_shift\018_hor.jpg" alt="018_hor">
+                </div>
+                
+                <div class="image-container">
+                    <h3>wong</h3>
+                    <img src="data\saliency_shift\018_wong.jpg" alt="018_wong">
+                </div>
+                </div>
+        <h2 class="image-title">Image Set: 116</h2>
+        <div class="image-reference">
+            <div class="image-container">
+                <h3>Original Image</h3>
+                <img src="data\saliency_shift\116_in.jpg" alt="Original image">
+            </div>
+            <div class="image-container">
+                <h3>Mask</h3>
+                <img src="data\saliency_shift\masks\116_mask.jpg" alt="Mask image">
+            </div>
+        </div>
+        <div class="image-row">
+            <div class="image-container">
+                <h3>Our implementation</h3>
+                <img src="data\saliency_shift\116_ours.jpg" alt="Ours image">
+            </div> 
+            <div class="image-container">
+                <h3>Paper implementation</h3>
+                <img src="data\saliency_shift\116_out.jpg" alt="Paper image">
+            </div>
+        
+        
+                <div class="image-container">
+                    <h3>hag</h3>
+                    <img src="data\saliency_shift\116_hag.jpg" alt="116_hag">
+                </div>
+                
+                <div class="image-container">
+                    <h3>hor</h3>
+                    <img src="data\saliency_shift\116_hor.jpg" alt="116_hor">
+                </div>
+                
+                <div class="image-container">
+                    <h3>wong</h3>
+                    <img src="data\saliency_shift\116_wong.jpg" alt="116_wong">
+                </div>
+                </div></body></html>
