@@ -1,14 +1,13 @@
 from pathlib import Path
 from argparse import ArgumentParser
 from PIL import Image
+from main import main
 
 
 REF_PATH = Path(".\data\saliency_shift")
 MASK_PATH = REF_PATH / "masks"
 ORIGINAL_PREFIX = "_in"
 OUT = "html"
-
-
 
 def placeholder(img_path, mask_path):
     """
@@ -356,7 +355,7 @@ if __name__ == "__main__":
             raise ValueError(f"Mask for {img_path} not found.")
         
         # Apply the saliency shift
-        img = placeholder(img_path, mask_path)
+        img = main(img_path, mask_path, 0.4)
         
         # Save the image
         suffix = "_ours.jpg"
@@ -376,6 +375,6 @@ if __name__ == "__main__":
         render_html(image_to_mask, "results.html", images_path)
     elif OUT == "latex":
         print("- Output format: LaTeX")
-        render_latex(image_to_mask, "results.tex", images_path)
+        raise ValueError(f"Output format {OUT} not supported yet :/.")
     else:
         raise ValueError(f"Output format {OUT} not supported.")

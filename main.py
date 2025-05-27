@@ -106,7 +106,7 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7,
         if convert:
             J[0] = cv2.cvtColor(J[0], cv2.COLOR_RGB2Lab)
 
-        J[1] = minimize_J(J[0], input_image_Lab, mask_image, D_positive, D_negative, D_pos_mask, D_neg_mask, patch_size)
+        J[1] = minimize_J(J[0], input_image_Lab, R, D_positive, D_negative, D_pos_mask, D_neg_mask, patch_size)
         print(" - Done.")
 
         # Convert back into RGB
@@ -190,6 +190,7 @@ def image_update_only(input_image, original_img, R, iterations, tau_positive, ta
         # Convert in Lab
         image = cv2.cvtColor(image, cv2.COLOR_RGB2Lab)
         # Compute the image update
+        
         image = minimize_J(image, original_img_lab, R, D_positive, D_negative, D_pos_mask, D_neg_mask, patch_size)
 
         # Convert back in RGB
@@ -261,24 +262,14 @@ def update_taus(tau_positive, tau_negative, criterion, learning_rate):
     return tau_positive, tau_negative
         
 
-# Entry point
-if __name__ == "__main__":
+def main( image_path, mask_path, delta_s):
+    """ Main function to run the saliency manipulation algorithm on an image with a mask.
+    Args:
+        image_path (str): Path to the input image.
+        mask_path (str): Path to the mask image.
+        delta_s (float): Desired saliency contrast between the region of interest and the rest of the image.
+    """
 
-    if len(sys.argv) == 4:
-        image_path = sys.argv[1]
-        mask_path = sys.argv[2]
-        delta_s = float(sys.argv[3])
-    elif len(sys.argv) == 3:
-        image_nb = sys.argv[1]
-        image_path = f'./data/saliency_shift/{image_nb}_in.jpg'
-        mask_path = f'./data/saliency_shift/masks/{image_nb}_mask.jpg'
-        delta_s = float(sys.argv[2])
-    else:
-        raise Exception("Usage: python manipulating_saliency_main.py <image_path> <mask_path> <delta_s>")
-    
-    # Check that the path corresponds to existing files
-    if not os.path.isfile(image_path) or not os.path.isfile(mask_path):
-        raise FileNotFoundError(f"Path {image_path} does not exist.")
 
     # Read the image
     input_image = cv2.imread(image_path)
@@ -314,7 +305,7 @@ if __name__ == "__main__":
     # Starting with the coarsest image
     utils.header_print("\nRunning the algorithm on the coarsest image...")
     
-    coarse_images, coarse_s_maps, tau_positive, tau_negative, saliency = manipulate_saliency(img, mask_image, delta_s, max_iteration=8)
+    coarse_images, coarse_s_maps, tau_positive, tau_negative, saliency = manipulate_saliency(img, mask_image, delta_s, max_iteration=3)
     coarse_image = coarse_images[-1].copy()
 
     # Save info
@@ -393,13 +384,36 @@ if __name__ == "__main__":
     final_image = img
     
     # Display the original image and the saliency map
-    input_s_map = compute_saliency_map(input_image)
-    utils.display_images([input_image, final_image, mask_image, input_s_map, s_maps[-1]], ["intput", "modified", "mask", "input saliency map", "final saliency map"])
+    if utils.DISP_OUT:        
+        input_s_map = compute_saliency_map(input_image)
+        utils.display_images([input_image, final_image, mask_image, input_s_map, s_maps[-1]], ["intput", "modified", "mask", "input saliency map", "final saliency map"])
 
-    plt.plot(saliency_contrast)
-    plt.title("Saliency contrast over iterations")
+        plt.plot(saliency_contrast)
+        plt.title("Saliency contrast over iterations")
     # save the orinal image
     # save_image(image, folder_path + "original_image.jpg")
-
     plt.show()
+        
+    return final_image
+
+# Entry point
+if __name__ == "__main__":
+
+    if len(sys.argv) == 4:
+        image_path = sys.argv[1]
+        mask_path = sys.argv[2]
+        delta_s = float(sys.argv[3])
+    elif len(sys.argv) == 3:
+        image_nb = sys.argv[1]
+        image_path = f'./data/object_enhancement/{image_nb}_in.jpg'
+        mask_path = f'./data/object_enhancement/masks/{image_nb}_mask.jpg'
+        delta_s = float(sys.argv[2])
+    else:
+        raise Exception("Usage: python manipulating_saliency_main.py <image_path> <mask_path> <delta_s>")
+    # Check that the path corresponds to existing files
+    if not os.path.isfile(image_path) or not os.path.isfile(mask_path):
+        raise FileNotFoundError(f"Path {image_path} does not exist.")
+    
+    main(image_path, mask_path, delta_s)
+    
     
