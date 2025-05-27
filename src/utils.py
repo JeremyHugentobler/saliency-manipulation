@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import cv2, skimage, os, sys
 
 VERBOSE = False
+DISP_OUT = True
 
 def header_print(title):
     """Function to print a title with # around it

@@ -9,6 +9,7 @@ from PIL import Image
 from skimage.util import view_as_windows
 
 from src.utils import display_images, VERBOSE
+import logging
 
 # import matplotlib.pyplot as plt
 
@@ -77,7 +78,7 @@ def minimize_J_global_poisson(J, original_I, R, d_positive, d_negative, d_pos_ma
     
     ### SCREEN-POISSON
     print("  - Applying Poisson Screening...")
-
+    
     poisson = J_patched.copy()
     for _ in range(10):
         poisson = screen_poisson(original_I, poisson, lambda_factor=lambda_factor)
@@ -87,12 +88,12 @@ def minimize_J_global_poisson(J, original_I, R, d_positive, d_negative, d_pos_ma
     J_out =  (poisson - mean_diff).astype(np.uint8)
 
 
-    if VERBOSE:
-        diff = np.abs(poisson - J)
-        display_images([
-            cv2.cvtColor(J_patched.astype(np.uint8), cv2.COLOR_Lab2RGB), 
-            cv2.cvtColor(J_out, cv2.COLOR_Lab2RGB), 
-            cv2.cvtColor(diff.astype(np.uint8), cv2.COLOR_Lab2RGB),])
+    # if VERBOSE:
+    #     diff = np.abs(poisson - J)
+    #     display_images([
+    #         cv2.cvtColor(J_patched.astype(np.uint8), cv2.COLOR_Lab2RGB), 
+    #         cv2.cvtColor(J_out, cv2.COLOR_Lab2RGB), 
+    #         cv2.cvtColor(diff.astype(np.uint8), cv2.COLOR_Lab2RGB),])
 
     # J_out = screen_poisson_brightness(J, J_patched, lambda_factor=lambda_factor)
     # J_out = screen_poisson_luminance(J, J_patched, lambda_factor=lambda_factor)
