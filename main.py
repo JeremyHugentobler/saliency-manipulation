@@ -53,8 +53,8 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7,
     ################################
 
     # Initialize tau +/-
-    tau_positive = 0.3
-    tau_negative = 0.7
+    tau_positive = 0.5
+    tau_negative = 0.5
 
     print("\ninitalizing variables")
 
@@ -66,7 +66,8 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7,
     print(" - computing saliency map...")
     S_J = compute_saliency_map(J[0])
     print(" - Done.")
-
+    
+    S_I = S_J.copy()  # Initial saliency map
     s_maps = [S_J.copy()]
     saliency_contrast = []
     images = [input_image.copy()]
@@ -89,12 +90,12 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7,
 
         # DB update
         print(f" - computing DB with tau+ = {tau_positive}, tau- = {tau_negative}...")
-        D_positive, D_negative, D_pos_mask, D_neg_mask = compute_database(tau_positive, tau_negative, J[0], S_J)
+        D_positive, D_negative, D_pos_mask, D_neg_mask = compute_database(tau_positive, tau_negative, input_image, S_I)
         print(f" - Done, DB+ size: {D_positive.shape[0]}, DB- size: {D_negative.shape[0]}")
         
         if utils.VERBOSE:
             # Construct and display the database's images
-            I_D_positive, I_D_negative = db.compute_image_database(J[0], D_positive, D_negative)
+            I_D_positive, I_D_negative = db.compute_image_database(input_image, D_positive, D_negative)
 
             utils.display_images([S_J, I_D_positive, I_D_negative])
 
@@ -171,6 +172,9 @@ def image_update_only(input_image, original_img, R, iterations, tau_positive, ta
     image = input_image.copy()
     original_img_lab = cv2.cvtColor(original_img, cv2.COLOR_RGB2Lab)
 
+    S_I = compute_saliency_map(original_img)
+
+
     saliency_contrast = []
         
     for i in range(iterations):
@@ -181,7 +185,7 @@ def image_update_only(input_image, original_img, R, iterations, tau_positive, ta
         saliency_contrast.append(phi(s_map, R))
 
         # Get the databases
-        D_positive, D_negative, D_pos_mask, D_neg_mask = compute_database(tau_positive, tau_negative, image, s_map)
+        D_positive, D_negative, D_pos_mask, D_neg_mask = compute_database(tau_positive, tau_negative, original_img, S_I)
         
         # Convert in Lab
         image = cv2.cvtColor(image, cv2.COLOR_RGB2Lab)
@@ -266,8 +270,8 @@ if __name__ == "__main__":
         delta_s = float(sys.argv[3])
     elif len(sys.argv) == 3:
         image_nb = sys.argv[1]
-        image_path = f'./data/object_enhancement/{image_nb}_in.jpg'
-        mask_path = f'./data/object_enhancement/masks/{image_nb}_mask.jpg'
+        image_path = f'./data/saliency_shift/{image_nb}_in.jpg'
+        mask_path = f'./data/saliency_shift/masks/{image_nb}_mask.jpg'
         delta_s = float(sys.argv[2])
     else:
         raise Exception("Usage: python manipulating_saliency_main.py <image_path> <mask_path> <delta_s>")
@@ -319,7 +323,7 @@ if __name__ == "__main__":
     saliency_contrast.extend(saliency)
 
     original_img = pyramids[-1].copy()
-    pyramids[-1] = coarse_image
+    pyramids[-1] = coarse_image.copy()
     
     # Now, we use those tau + and tau - to run the algorithm on the images at finer scales without having to compute them again
     n = len(pyramids) - 1

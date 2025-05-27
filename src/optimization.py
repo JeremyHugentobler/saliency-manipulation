@@ -14,7 +14,7 @@ from src.utils import display_images, VERBOSE
 
 STRIDE = 1
 MAX_ITERATION = 10
-PATCH_MATCH_MAX_ITER = 2*10 # each "iterartion" is (rdm search + propagate)
+PATCH_MATCH_MAX_ITER = 2*5 # each "iterartion" is (rdm search + propagate)
 EPSILON = 100
 
 def minimize_J_global_poisson(J, original_I, R, d_positive, d_negative, d_pos_mask, d_neg_mask, patch_size, lambda_factor=3):
@@ -35,59 +35,51 @@ def minimize_J_global_poisson(J, original_I, R, d_positive, d_negative, d_pos_ma
     # Pad the image so that all pixel location of J is a valid patch center.
     if radius > 0:
         J_paded = np.pad(J, ((radius, radius), (radius, radius), (0,0)), mode='reflect')
+        I_paded = np.pad(original_I, ((radius, radius), (radius, radius), (0,0)), mode='reflect')
     else:
         J_paded = J
+        I_paded = original_I
 
     # off_field = np.zeros((width, height, 3), dtype=np.int32)
-    off_field = generate_random_offset_field(R, J_paded, patch_size, d_positive, d_negative, d_pos_mask, d_neg_mask)
+    off_field = generate_random_offset_field(R, I_paded, J_paded, patch_size, d_positive, d_negative, d_pos_mask, d_neg_mask)
     print("    - Offset field initialized")
     ### SEARCH STEP
     print("    - Search step")
-    off_field = minimize_off_field_dist(off_field, J_paded, R, patch_size, d_pos_mask, d_neg_mask)
+    off_field = minimize_off_field_dist(off_field, I_paded, J_paded, R, patch_size, d_pos_mask, d_neg_mask)
 
     ### VOTING STEP
     print("    - Vote step")
-    # display_images([
-    #     cv2.cvtColor(J, cv2.COLOR_Lab2RGB),
-    #     cv2.cvtColor(J_patched, cv2.COLOR_Lab2RGB).astype(np.uint8)], titles=["Image", "Patched Image"])
-    
-    ### SCREEN-POISSON
-    print("  - Applying Poisson Screening...")
 
     # Blow up image into shape (w,h,p,p,3)
-    J_patches = view_as_windows(J_paded, (patch_size, patch_size, 3))
-    J_patches = J_patches.squeeze()
+    I_patches = view_as_windows(I_paded, (patch_size, patch_size, 3))
+    I_patches = I_patches.squeeze()
     
     idxs = np.indices((width,height))
     l_x, l_y = idxs + off_field[:,:,:2].transpose(2,0,1).astype(np.int32)
 
     # Retrieve patches from location
-    offseted_patches = J_patches[l_x, l_y]
+    # J_patched = J[l_x, l_y]
+    offseted_patches = I_patches[l_x, l_y]
 
     # Compute the mean of each patch
-    per_pixel_patch_mean = offseted_patches.mean(axis=(2,3))
-    J_patched = per_pixel_patch_mean.astype(np.uint8)
+    # per_pixel_patch_mean = offseted_patches.mean(axis=(2,3))
+    J_patched = offseted_patches.mean(axis=(2,3)).astype(np.uint8)
 
-    # Separate foreground and background 
-    # foreground = per_pixel_patch_mean[R>0]
-    # background = per_pixel_patch_mean[R==0]
+    # # repad the mean image
+    # per_pixel_patch_mean_padded = np.pad(per_pixel_patch_mean, ((radius, radius), (radius, radius), (0, 0)), mode='reflect')
 
-    # foreground_img = np.ones_like(per_pixel_patch_mean, dtype=np.float32) * foreground.mean(axis=0) 
-    # background_img = np.ones_like(per_pixel_patch_mean, dtype=np.float32) * background.mean(axis=0)
+    # # Blow up image into shape (w,h,p,p,3) to get overlaping mean
+    # mean_patches = view_as_windows(per_pixel_patch_mean_padded, (patch_size, patch_size, 3))
+    # mean_patches = mean_patches.squeeze()
+
+    # # compute the patch mean of the per pixel mean
+    # J_patched = mean_patches.mean(axis=(2,3)).astype(np.uint8)
     
-    # foreground_img[R>0] = foreground
-    # background_img[R==0] = background
-
-    # foreground_img = vote_image(foreground_img, patch_size)
-    # background_img = vote_image(background_img, patch_size)
-
-    # J_patched = background_img.copy()
-    # J_patched[R>0] = foreground_img[R>0]
+    ### SCREEN-POISSON
+    print("  - Applying Poisson Screening...")
 
     poisson = J_patched.copy()
-
-
-    for _ in range(20):
+    for _ in range(10):
         poisson = screen_poisson(original_I, poisson, lambda_factor=lambda_factor)
 
     # mean correction
@@ -133,12 +125,16 @@ def get_patch(J,x,y,patch_size):
         patch = J[x,y]
     return patch
 
-def compute_dist(J, off_field, patch_size):
+def compute_dist(I, J, off_field, patch_size):
     w, h = off_field.shape[:2]
 
     # Blow up image into shape (w,h,p,p,3)
     J_patches = view_as_windows(J, (patch_size, patch_size, 3))
     J_patches = J_patches.squeeze()
+
+    # Blow up image into shape (w,h,p,p,3)
+    I_patches = view_as_windows(I, (patch_size, patch_size, 3))
+    I_patches = I_patches.squeeze()
 
     # Retrieve location indices from offsets
     idxs = np.indices((w,h))
@@ -155,7 +151,7 @@ def compute_dist(J, off_field, patch_size):
     l_y[outsiders] = idxs[1, outsiders]
 
     # Retrieve patches from location
-    offseted_patches = J_patches[l_x, l_y]
+    offseted_patches = I_patches[l_x, l_y]
 
     # Compute SSD
     dists = np.sum((J_patches.astype(np.float64) - offseted_patches.astype(np.float64)) ** 2, axis=(2,3,4))
@@ -166,7 +162,7 @@ def compute_dist(J, off_field, patch_size):
 
     return dists
 
-def generate_random_offset_field(R, J, patch_size, d_positive, d_negative, d_pos_mask, d_neg_mask):
+def generate_random_offset_field(R, I, J, patch_size, d_positive, d_negative, d_pos_mask, d_neg_mask):
     """
     Gernerate a new random offset field for each pixel such that, pixels belonging to a region (in R or not in R) have 
     their random offset that is pointing towards an other pixel that is in the same region. 
@@ -200,7 +196,7 @@ def generate_random_offset_field(R, J, patch_size, d_positive, d_negative, d_pos
     # offset_field[np.logical_not(R)] = f_out[np.logical_not(R)]
 
     # Compute the patch_distance
-    dists = compute_dist(J, offset_field, patch_size)
+    dists = compute_dist(I, J, offset_field, patch_size)
 
     # return the offset field with the corresponding distance
     return np.concatenate((offset_field.transpose(2,0,1), dists[None,:,:])).transpose(1,2,0)
@@ -220,12 +216,12 @@ def random_offset_field_jitter(offset_field, radius=5):
 
     return new_offset_f    
 
-def validated_candidates(off_field, candidates, J, patch_size, R, d_pos_mask, d_neg_mask):
+def validated_candidates(off_field, candidates, I, J, patch_size, R, d_pos_mask, d_neg_mask):
 
     old_off_f = off_field.copy()
 
     # Recompute new SSD from candidates
-    dists = compute_dist(J, candidates, patch_size)
+    dists = compute_dist(I, J, candidates, patch_size)
     candidates[:,:,2] = dists
     
     # Gather all the points where the candidates are better
@@ -248,7 +244,7 @@ def validated_candidates(off_field, candidates, J, patch_size, R, d_pos_mask, d_
 
     return off_field
 
-def minimize_off_field_dist(off_field, J, R, patch_size, d_pos_mask, d_neg_mask):
+def minimize_off_field_dist(off_field, I, J, R, patch_size, d_pos_mask, d_neg_mask):
     """
     minimize an offset field F st, 
         fa F(x,y) = (x_off, y_off, d): d = SSD(patch(x,y), patch(x+x_off, y+y_off)) is minimized
@@ -265,13 +261,13 @@ def minimize_off_field_dist(off_field, J, R, patch_size, d_pos_mask, d_neg_mask)
     images.append(cv2.remap(J, val[1], val[0], cv2.INTER_LINEAR))
 
     p_mode = 0
-    r_max = min(width, height) // 3
+    r_max = min(width, height) // 4
     # Iterate and alternate between search and propagate
     for i in tqdm(range(PATCH_MATCH_MAX_ITER)):
         if i%2 == 0:
             ### propagate mode
             candidates = propagate(off_field, R, p_mode)                
-            off_field = validated_candidates(off_field, candidates, J, patch_size, R, d_pos_mask, d_neg_mask)
+            off_field = validated_candidates(off_field, candidates, I, J, patch_size, R, d_pos_mask, d_neg_mask)
 
             p_mode = 1-p_mode
                 
@@ -281,7 +277,7 @@ def minimize_off_field_dist(off_field, J, R, patch_size, d_pos_mask, d_neg_mask)
             while r > 1:
                 # compare with randomly generated offset field
                 candidates = random_offset_field_jitter(off_field, radius=r)
-                off_field = validated_candidates(off_field, candidates, J, patch_size, R, d_pos_mask, d_neg_mask)
+                off_field = validated_candidates(off_field, candidates, I, J, patch_size, R, d_pos_mask, d_neg_mask)
                 
                 r = r//2        # halves the search radius for next iteration
 

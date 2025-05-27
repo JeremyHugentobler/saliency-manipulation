@@ -67,6 +67,19 @@ def custom_saliency(input_image):
 
     s_map = np.sqrt(C_norm ** 2 + (L_norm ** 2)/2)
 
+    # Compute CDF to linearize the values
+    flat = s_map.flatten()
+
+    hist, _ = np.histogram(flat, bins=256, range=(0, 1))
+
+    pdf = hist / hist.sum()
+
+    cdf = np.cumsum(pdf)
+
+    s_map = cdf[(flat * 255).astype(np.uint8)].reshape(s_map.shape)
+
+    s_map = s_map ** 1.5
+
     return s_map
 
 def course_saliancy(input_image):
