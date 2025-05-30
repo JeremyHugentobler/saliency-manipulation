@@ -41,6 +41,7 @@ To run the code, please follow the following format:
 
 Example: python .\main.py .\data\debug\easy_apple_small.jpg .\data\debug\easy_apple_small_mask.jpg 0.1
 
+For a more detailed view of the execution, toggle the `VERBOSE` boolean in `src/utils.py`. This will display intermediary resutls.
 
 ## Benchmark
 We compared our results with the available results from the paper's dataset and the comparison can be seen on the following website: [https://jeremyhugentobler.github.io/saliency-manipulation/](https://jeremyhugentobler.github.io/saliency-manipulation/)

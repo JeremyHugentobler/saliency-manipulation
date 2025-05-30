@@ -15,10 +15,6 @@ def compute_image_database(J, D_positve, D_negative, patch_size=7):
     x,y = D_negative.T
     D_negative_mask[x,y] = 1
 
-    # Dilate the masks so that for a pixel (i,j), the whole patch centered at (i,j) is selected
-    # D_positive_mask = cv2.dilate(D_positive_mask, np.ones((patch_size, patch_size), np.uint8), iterations=1)
-    # D_negative_mask = cv2.dilate(D_negative_mask, np.ones((patch_size, patch_size), np.uint8), iterations=1)
-
     # Create the database by applying the patch on the image
     D_plus = J * D_positive_mask
     D_minus = J * D_negative_mask
@@ -53,7 +49,5 @@ def compute_location_database(tau_plus, tau_minus, J, S_J):
 
     D_minus_mask = np.zeros_like(S_J)
     D_minus_mask[x,y] = 1
-
-
 
     return D_plus, D_minus, D_plus_mask, D_minus_mask

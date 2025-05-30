@@ -5,7 +5,7 @@ import numpy as np
 from pathlib import Path
 import sys
 import torch
-# from src.tempsal_wrapper import compute_saliency_map
+from src.tempsal_wrapper import compute_saliency_map
 
 
 CV_SALIENCY_COARSE = cv2.saliency.StaticSaliencySpectralResidual().create()
@@ -13,20 +13,9 @@ CV_SALIENCY_FINE = cv2.saliency.StaticSaliencyFineGrained().create()
 
 def tempsal_saliency(image):
     saliency = compute_saliency_map(image).mean(axis=2)
+
     # Scale the map so that max value = 1
     saliency /= saliency.max()
-
-    # import matplotlib.pyplot as plt
-    # plt.plot(saliency[75,:])
-
-    # Linearize the values
-    # saliency = saliency / (saliency + np.median(saliency))
-
-    # print("median of the new saliency:", np.median(saliency))
-    # import matplotlib.pyplot as plt
-    # plt.plot(saliency[75,:])
-    # plt.show()
-
 
     return saliency
 
@@ -140,7 +129,7 @@ def apply_saliancy(input_image, saliancy_map, alpha):
 
 def apply_range_of_saliancy(input_image, saliancy_map, alphas):
     output_images = []
-# 
+
     for alpha in alphas:
         modified_image = apply_saliancy(input_image, saliancy_map, alpha)
         output_images.append(modified_image)

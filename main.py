@@ -53,8 +53,8 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7,
     ################################
 
     # Initialize tau +/-
-    tau_positive = 0.5
-    tau_negative = 0.5
+    tau_positive = 0.3
+    tau_negative = 0.7
 
     print("\ninitalizing variables")
 
@@ -73,9 +73,6 @@ def manipulate_saliency(input_image, R, delta_s, max_iteration=10, patch_size=7,
     images = [input_image.copy()]
 
     input_image_Lab = cv2.cvtColor(input_image, cv2.COLOR_RGB2Lab)
-
-    # Initialize the Database I_D +/-
-    # I_D_positive, I_D_negative = [np.zeros_like(input_image) for _ in range(2)]
     
     ##############################
     # Iteration of the algorithm #
@@ -305,7 +302,7 @@ def main( image_path, mask_path, delta_s):
     # Starting with the coarsest image
     utils.header_print("\nRunning the algorithm on the coarsest image...")
     
-    coarse_images, coarse_s_maps, tau_positive, tau_negative, saliency = manipulate_saliency(img, mask_image, delta_s, max_iteration=3)
+    coarse_images, coarse_s_maps, tau_positive, tau_negative, saliency = manipulate_saliency(img, mask_image, delta_s, max_iteration=10)
     coarse_image = coarse_images[-1].copy()
 
     # Save info
@@ -350,11 +347,6 @@ def main( image_path, mask_path, delta_s):
         # We put the image back in the pyramid
         original_img = pyramids[n - 1 - i].copy()
         pyramids[n - 1 - i] = img
-        # display the image at this scale
-        # plt.figure(figsize=(10,10))
-        # plt.imshow(img)
-        # plt.axis('off')
-        # plt.show()
     
     # Save animations
     images = [cv2.resize(img, (w, h), interpolation=cv2.INTER_LINEAR) for img in images]
@@ -390,9 +382,8 @@ def main( image_path, mask_path, delta_s):
 
         plt.plot(saliency_contrast)
         plt.title("Saliency contrast over iterations")
-    # save the orinal image
-    # save_image(image, folder_path + "original_image.jpg")
-    plt.show()
+
+        plt.show()
         
     return final_image
 
